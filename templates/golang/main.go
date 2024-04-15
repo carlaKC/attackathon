@@ -35,6 +35,10 @@ func main() {
 		LndNodes: lnds,
 	}
 
+	if err := RunAttack(ctx, target, graph, jammer); err != nil {
+		fmt.Printf("Error running attack: %v\n", err)
+		os.Exit(1)
+	}
 
         fmt.Println("Cleaning up opened channels for all nodes")
         if err:=graph.CloseAllChannels(ctx, 0); err!=nil{

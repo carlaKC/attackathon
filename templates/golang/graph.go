@@ -121,17 +121,19 @@ func (c *GraphHarness) WaitForChannel(ctx context.Context, lookupNode,
 
 	for i := 0; i < 5; i++ {
 		graphInfo, err := c.LookupNode(ctx, lookupNode, pubkey, true)
-		if err == nil {
-
+		if err != nil {
+			fmt.Printf("Lookup node %v with %v failed: %v\n",
+				pubkey, lookupNode, err)
+		} else {
 			for _, c := range graphInfo.Channels {
 				if c.ChannelPoint == channel.String() {
 					return nil
 				}
 			}
-		}
 
-		fmt.Printf("Lookup node %v with %v failed: %v\n",
-			pubkey, lookupNode, err)
+			fmt.Printf("Node does not have channel: %v yet",
+				channel)
+		}
 
 		select {
 		case <-time.After(time.Second * 30):
