@@ -49,6 +49,10 @@ type JammingPaymentReq struct {
 
 	// Instruct the receiving node to wait for this duration before settle.
 	SettleWait time.Duration
+
+	// EarlySettle is a channel that when closed, will force the jam payment
+	// to be settled/canceled (possibly earlier than its settle wait time).
+	EarlySettle chan struct{}
 }
 
 type JammingPaymentResp struct {
@@ -165,9 +169,7 @@ func (j *JammingHarness) JammingPayment(ctx context.Context,
 
 				invoiceChannel <- i.Htlcs
 
-				select {
-				case <-time.After(wait):
-
+				complete := func() {
 					var err error
 					if req.Settle {
 						err = dest.Invoices.SettleInvoice(
@@ -182,6 +184,14 @@ func (j *JammingHarness) JammingPayment(ctx context.Context,
 						errChan <- err
 						return
 					}
+				}
+
+				select {
+				case <-req.EarlySettle:
+					complete()
+
+				case <-time.After(wait):
+					complete()
 
 				case <-ctx.Done():
 					errChan <- ctx.Err()
