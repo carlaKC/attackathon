@@ -239,7 +239,7 @@ func (r *ReputationHarness) ProbeEndorsedCount(ctx context.Context,
 			close(earlySettle)
 			outcome.Timeout = true
 
-                case <-ctx.Done():
+		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
 	}
@@ -291,8 +291,6 @@ func (r *ReputationHarness) BuildReputation(ctx context.Context, src,
 		// Dispatch payment and wait for result in goroutine.
 		wg.Add(1)
 		go func() {
-			defer wg.Done()
-
 			jamReq := JammingPaymentReq{
 				AmtMsat:         80000,
 				SourceIdx:       src,
@@ -302,6 +300,19 @@ func (r *ReputationHarness) BuildReputation(ctx context.Context, src,
 				Settle:          true,
 				EarlySettle:     make(chan struct{}),
 			}
+
+			// Close the EarlySettle channel to make a best-effort
+			// shot at canceling our htlcs on exit (when we hit an
+			// error).
+			defer func() {
+				select {
+				case <-jamReq.EarlySettle:
+				default:
+					close(jamReq.EarlySettle)
+				}
+
+				wg.Done()
+			}()
 
 			resp, err := r.jammer.JammingPayment(ctx, jamReq)
 			if err != nil {

@@ -7,7 +7,7 @@ require (
 	github.com/btcsuite/btcd/btcutil v1.1.4-0.20230904040416-d4f519f5dc05
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.0.2
 	github.com/lightninglabs/lndclient v1.0.0
-	github.com/lightningnetwork/lnd v0.16.0-beta
+	github.com/lightningnetwork/lnd v0.18.0-beta.rc1
 )
 
 require (
@@ -30,6 +30,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.1.3 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/coreos/go-semver v0.3.0 // indirect
+	github.com/coreos/go-systemd v0.0.0-20190719114852-fd7a80b32e1f // indirect
 	github.com/coreos/go-systemd/v22 v22.3.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/decred/dcrd/crypto/blake256 v1.0.0 // indirect
