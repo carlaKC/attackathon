@@ -35,22 +35,26 @@ func main() {
 		LndNodes: lnds,
 	}
 
+	cleanup := func() error {
+		fmt.Println("Cleaning up opened channels for all nodes")
+		if err := graph.CloseAllChannels(ctx, 0); err != nil {
+			return err
+		}
 
-        fmt.Println("Cleaning up opened channels for all nodes")
-        if err:=graph.CloseAllChannels(ctx, 0); err!=nil{
-                fmt.Printf("Could not clean up node 0: %v\n", err)
-                os.Exit(1)
-        }
+		if err := graph.CloseAllChannels(ctx, 1); err != nil {
+			return err
+		}
 
-        if err:=graph.CloseAllChannels(ctx, 1); err!=nil{
-                fmt.Printf("Could not clean up node 1: %v\n", err)
-                os.Exit(1)
-        }
+		if err := graph.CloseAllChannels(ctx, 2); err != nil {
+			return err
+		}
 
-        if err:=graph.CloseAllChannels(ctx, 2); err!=nil{
-                fmt.Printf("Could not clean up node q: %v\n", err)
-                os.Exit(1)
-        }
+		return nil
+	}
+
+	if err := cleanup(); err != nil {
+		fmt.Printf("Could not clean up channels: %v\n", err)
+	}
 
 	fmt.Println("Waiting for threads to shutdown")
 	cancel()
