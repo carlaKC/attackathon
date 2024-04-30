@@ -68,17 +68,49 @@ type JammingPaymentResp struct {
 	Err error
 }
 
-// JammingPayment assists in creating a payment that can be used for channel
+// SendPaymentFunc is a function type used to abstract lnd's various send
+// payment APIs.
+type SendPaymentFunc func(ctx context.Context, inv string) (
+	<-chan lndclient.PaymentStatus, <-chan error, error)
+
+// JammingPayment performs a jamming payment using LND's internal pathfinding.
+func (j *JammingHarness) JammingPayment(ctx context.Context,
+	req JammingPaymentReq) (<-chan JammingPaymentResp, error) {
+
+	endorse := routerrpc.HTLCEndorsement_ENDORSEMENT_FALSE
+	if req.EndorseOutgoing {
+		endorse = routerrpc.HTLCEndorsement_ENDORSEMENT_TRUE
+	}
+
+	sendPaymentClosure := func(ctx context.Context, inv string) (
+		<-chan lndclient.PaymentStatus, <-chan error, error) {
+
+		return j.LndNodes.GetNode(req.SourceIdx).Router.SendPayment(
+			ctx,
+			lndclient.SendPaymentRequest{
+				Invoice:         inv,
+				Timeout:         time.Hour,
+				MaxFeeMsat:      lnwire.MaxMilliSatoshi,
+				EndorseOutgoing: endorse,
+			},
+		)
+	}
+
+	return j.jammingPayment(ctx, req, sendPaymentClosure)
+}
+
+// jammingPayment assists in creating a payment that can be used for channel
 // jamming:
 // - Creates a hold invoice on the target node
-// - Pays the invoice from the source node with endorsed set per parameter
+// - Pays the invoice using the payment closure provided
 // - Optionally holds the HTLCs on the recipient for a wait period.
 // - Settles/fails the HTLCs acks as instructed.
 //
 // It returns a channel that will report the outcome of the payment, along with
 // any HTLCs used to pay it.
-func (j *JammingHarness) JammingPayment(ctx context.Context,
-	req JammingPaymentReq) (<-chan (JammingPaymentResp), error) {
+func (j *JammingHarness) jammingPayment(ctx context.Context,
+	req JammingPaymentReq, sendPmt SendPaymentFunc) (
+	<-chan (JammingPaymentResp), error) {
 
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -102,21 +134,8 @@ func (j *JammingHarness) JammingPayment(ctx context.Context,
 		return nil, err
 	}
 
-	endorse := routerrpc.HTLCEndorsement_ENDORSEMENT_FALSE
-	if req.EndorseOutgoing {
-		endorse = routerrpc.HTLCEndorsement_ENDORSEMENT_TRUE
-	}
-
 	sendTime := time.Now()
-	statusChan, pmtErrChan, err := j.LndNodes.GetNode(req.SourceIdx).Router.SendPayment(
-		ctx,
-		lndclient.SendPaymentRequest{
-			Invoice:         inv,
-			Timeout:         time.Hour,
-			MaxFeeMsat:      lnwire.MaxMilliSatoshi,
-			EndorseOutgoing: endorse,
-		},
-	)
+	statusChan, pmtErrChan, err := sendPmt(ctx, inv)
 	if err != nil {
 		cancel()
 		return nil, err
