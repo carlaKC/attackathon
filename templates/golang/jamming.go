@@ -73,6 +73,70 @@ type JammingPaymentResp struct {
 type SendPaymentFunc func(ctx context.Context, inv string) (
 	<-chan lndclient.PaymentStatus, <-chan error, error)
 
+// JammingPaymentRoute performs a jamming payment using the route provided.
+func (j *JammingHarness) JammingPaymentRoute(ctx context.Context,
+	req JammingPaymentReq, route lndclient.QueryRoutesResponse) (
+	<-chan JammingPaymentResp, error) {
+
+	endorse := routerrpc.HTLCEndorsement_ENDORSEMENT_FALSE
+	if req.EndorseOutgoing {
+		endorse = routerrpc.HTLCEndorsement_ENDORSEMENT_TRUE
+	}
+
+	sendPaymentClosure := func(ctx context.Context, inv string) (
+		<-chan lndclient.PaymentStatus, <-chan error, error) {
+
+		source := j.LndNodes.GetNode(req.SourceIdx)
+
+		b11, err := source.Client.DecodePaymentRequest(ctx, inv)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		// Copy everything because we're re-using this route over and
+		// over (hops are common reference, so we just copy everything).
+		pmtRoute := lndclient.QueryRoutesResponse{
+			TotalTimeLock: route.TotalTimeLock,
+			TotalFeesMsat: route.TotalFeesMsat,
+			TotalAmtMsat:  route.TotalAmtMsat,
+		}
+
+		for _, hop := range route.Hops {
+			pmtRoute.Hops = append(pmtRoute.Hops,
+				&lndclient.Hop{
+					ChannelID:        hop.ChannelID,
+					Expiry:           hop.Expiry,
+					AmtToForwardMsat: hop.AmtToForwardMsat,
+					FeeMsat:          hop.FeeMsat,
+					PubKey:           hop.PubKey,
+					MppRecord:        hop.MppRecord,
+					Metadata:         hop.Metadata,
+				},
+			)
+		}
+
+		// Each invoice we pay will have a different MPP record, so
+		// we set it for our set route here.
+		pmtRoute.Hops[len(pmtRoute.Hops)-1].MppRecord = &lnrpc.MPPRecord{
+			PaymentAddr:  b11.PaymentAddress[:],
+			TotalAmtMsat: int64(b11.Value),
+		}
+
+		pmtChan, errChan := source.Router.SendToRouteV2(
+			ctx,
+			lndclient.SendToRouteRequest{
+				PaymentHash: b11.Hash,
+				Route:       pmtRoute,
+				Endorsed:    endorse,
+			},
+		)
+
+		return pmtChan, errChan, nil
+	}
+
+	return j.jammingPayment(ctx, req, sendPaymentClosure)
+}
+
 // JammingPayment performs a jamming payment using LND's internal pathfinding.
 func (j *JammingHarness) JammingPayment(ctx context.Context,
 	req JammingPaymentReq) (<-chan JammingPaymentResp, error) {
