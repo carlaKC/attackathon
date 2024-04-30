@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
@@ -253,4 +254,36 @@ func (c *GraphHarness) CloseAllChannels(ctx context.Context, node int) error {
 
 	return nil
 
+}
+
+// SmallestPeer looks up the public key of the target node's peer that has the
+// smallest channel with it.
+func (c *GraphHarness) SmallestPeer(ctx context.Context, target route.Vertex) (
+	route.Vertex, error) {
+
+	targetNodeInfo, err := c.LookupNode(ctx, 0, target, true)
+	if err != nil {
+		return route.Vertex{}, err
+	}
+
+	// Now find the target node channel with the smallest capacity.
+	var (
+		targetChannel lndclient.ChannelEdge
+		minCap        = uint64(math.MaxUint64)
+	)
+	for _, channel := range targetNodeInfo.Channels {
+		if uint64(channel.Capacity) < minCap {
+			targetChannel = channel
+		}
+	}
+
+	fmt.Printf("Channel to attack is: %d\n", targetChannel.ChannelID)
+
+	// What is the peer that we are gonna connect to?
+	targetPeer := targetChannel.Node1
+	if targetChannel.Node1 == targetNodeInfo.PubKey {
+		targetPeer = targetChannel.Node2
+	}
+
+	return targetPeer, nil
 }
