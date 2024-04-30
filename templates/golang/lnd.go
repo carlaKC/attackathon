@@ -95,9 +95,10 @@ func getLndClient(nodeIdx int) (*lndclient.GrpcLndServices, error) {
 	}
 
 	return lndclient.NewLndServices(&lndclient.LndServicesConfig{
-		LndAddress:         server,
-		Network:            lndclient.NetworkRegtest,
-		CustomMacaroonPath: macaroon,
-		TLSPath:            cert,
+		LndAddress:            server,
+		Network:               lndclient.NetworkRegtest,
+		CustomMacaroonPath:    macaroon,
+		TLSPath:               cert,
+		BlockUntilChainSynced: true,
 	})
 }
