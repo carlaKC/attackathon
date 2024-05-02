@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"sync"
 	"time"
 
 	"github.com/btcsuite/btcd/btcutil"
@@ -17,8 +16,6 @@ import (
 // gossip etc).
 type GraphHarness struct {
 	LndNodes Nodes
-
-	wg sync.WaitGroup
 }
 
 type OpenChannelReq struct {

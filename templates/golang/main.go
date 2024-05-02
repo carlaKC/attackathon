@@ -98,6 +98,4 @@ func main() {
 	fmt.Println("Waiting for threads to shutdown")
 	cancel()
 	jammer.wg.Wait()
-	graph.wg.Wait()
-	rep.wg.Wait()
 }
