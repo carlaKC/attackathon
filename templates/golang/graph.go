@@ -216,7 +216,9 @@ func (c *GraphHarness) CloseAllChannels(ctx context.Context, node int) error {
 	for _, channel := range channels {
 		closeChan, errChan, err := sourceNode.Client.CloseChannel(
 			ctx, outpointFromString(channel.ChannelPoint),
-			false, 0, nil,
+                        // TODO: cooperatively close so that we can score 
+                        // properly.
+			true, 0, nil,
 		)
 		if err != nil {
 			return err
