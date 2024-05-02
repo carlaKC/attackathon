@@ -43,7 +43,7 @@ func (r *ReputationHarness) OpenChannels(ctx context.Context, targetNode,
 	targetPeer route.Vertex) error {
 
 	chanCap := funding.MaxBtcFundingAmount
-	_, err := r.graph.OpenChannel(ctx, OpenChannelReq{
+	chan1, err := r.graph.OpenChannel(ctx, OpenChannelReq{
 		Source:      0,
 		Dest:        targetNode,
 		CapacitySat: chanCap,
@@ -58,7 +58,7 @@ func (r *ReputationHarness) OpenChannels(ctx context.Context, targetNode,
 
 	// With attack node 1, open a channel with the targets peer & push a
 	// large amount to them.
-	_, err = r.graph.OpenChannel(ctx, OpenChannelReq{
+	chan2, err := r.graph.OpenChannel(ctx, OpenChannelReq{
 		Source:      1,
 		Dest:        targetPeer,
 		CapacitySat: chanCap,
@@ -73,7 +73,7 @@ func (r *ReputationHarness) OpenChannels(ctx context.Context, targetNode,
 	// Open chan from a2 to target (a2 is our "good" node). We will build
 	// good rep for it and maintain that good rep. If its payments stop
 	// going through then we know we have jammed the target channel.
-	_, err = r.graph.OpenChannel(ctx, OpenChannelReq{
+	chan3, err := r.graph.OpenChannel(ctx, OpenChannelReq{
 		Source:      2,
 		Dest:        targetNode,
 		CapacitySat: chanCap,
@@ -86,6 +86,17 @@ func (r *ReputationHarness) OpenChannels(ctx context.Context, targetNode,
 
 	fmt.Printf("Opened channel with target node (%s) from LND-2\n",
 		targetNode)
+
+	// Wait for channels to reflect in graphs.
+	fmt.Println("Waiting for channels to reflect in graphs")
+	r.graph.WaitForChannel(ctx, 1, 0, chan1)
+	r.graph.WaitForChannel(ctx, 2, 0, chan1)
+
+	r.graph.WaitForChannel(ctx, 0, 1, chan2)
+	r.graph.WaitForChannel(ctx, 2, 1, chan2)
+
+	r.graph.WaitForChannel(ctx, 0, 2, chan3)
+	r.graph.WaitForChannel(ctx, 1, 2, chan3)
 
 	return nil
 }
