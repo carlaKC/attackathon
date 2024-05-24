@@ -35,28 +35,42 @@ func main() {
 		LndNodes: lnds,
 	}
 
-	cleanup := func() error {
-		log.Println("Cleaning up opened channels for all nodes")
-		if err := graph.CloseAllChannels(ctx, 0); err != nil {
+	cleanup := func(force bool) error {
+		log.Println("Cleaning up channels for lnd-0")
+		if err := graph.CloseAllChannels(ctx, 0, force); err != nil {
 			return err
 		}
 
-		if err := graph.CloseAllChannels(ctx, 1); err != nil {
+		log.Println("Cleaning up channels for lnd-1")
+		if err := graph.CloseAllChannels(ctx, 1, force); err != nil {
 			return err
 		}
 
-		if err := graph.CloseAllChannels(ctx, 2); err != nil {
+		log.Println("Cleaning up channels for lnd-2")
+		if err := graph.CloseAllChannels(ctx, 2, force); err != nil {
 			return err
 		}
 
 		return nil
 	}
 
-	if err := cleanup(); err != nil {
-		log.Fatalf("Could not clean up channels: %v", err)
+	// Run cleanup on start to get rid of any lingering channels. Force
+	// close to clean up any old state from an unsuccessful run.
+	log.Println("Cleaning up any attacker channels from previous runs")
+	if err := cleanup(true); err != nil {
+		log.Fatalf("Could not clean up on start: %v", err)
+		os.Exit(1)
 	}
 
-	log.Println("Waiting for threads to shutdown")
-	cancel()
-	jammer.wg.Wait()
+	// Always cleanup at the end of our run. Do not force close because
+	// we expect all payments to be resolved.
+	defer func() {
+		if err := cleanup(false); err != nil {
+			log.Fatalf("Could not clean up channels: %v", err)
+		}
+
+		log.Println("Waiting for threads to shutdown")
+		cancel()
+		jammer.wg.Wait()
+	}()
 }

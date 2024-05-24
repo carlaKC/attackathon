@@ -206,7 +206,9 @@ func (c *GraphHarness) PeerConnected(ctx context.Context, source int,
 // CloseAllChannels cooperatively closes all the channels we currently have
 // open and mines blocks to confirm them. Note that it *does not* wait for
 // the channels to reflect as closed in our internal state.
-func (c *GraphHarness) CloseAllChannels(ctx context.Context, node int) error {
+func (c *GraphHarness) CloseAllChannels(ctx context.Context, node int,
+	forceClose bool) error {
+
 	sourceNode := c.LndNodes.GetNode(node)
 	channels, err := sourceNode.Client.ListChannels(ctx, false, false)
 	if err != nil {
@@ -218,7 +220,7 @@ func (c *GraphHarness) CloseAllChannels(ctx context.Context, node int) error {
 	for _, channel := range channels {
 		closeChan, errChan, err := sourceNode.Client.CloseChannel(
 			ctx, outpointFromString(channel.ChannelPoint),
-			true, 0, nil,
+			forceClose, 0, nil,
 		)
 		if err != nil {
 			return err
