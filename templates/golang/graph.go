@@ -29,6 +29,29 @@ type OpenChannelReq struct {
 	Private     bool
 }
 
+func (c *GraphHarness) WaitForSync(ctx context.Context, node int) error {
+	for i := 0; i < 3; i++ {
+		info, err := c.LndNodes.GetNode(node).Client.GetInfo(ctx)
+		if err != nil {
+			return err
+		}
+
+		if info.SyncedToChain && info.SyncedToGraph {
+			return nil
+		}
+
+		select {
+		case <-time.After(time.Second * 5):
+			continue
+
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
+	return fmt.Errorf("Node: %v not synced in time", node)
+}
+
 // OpenChannel is a blocking call that opens a channel from the source node
 // provided to the target:
 // - looks up a node in the graph
@@ -38,6 +61,10 @@ type OpenChannelReq struct {
 // - waits for the channel to be active
 func (c *GraphHarness) OpenChannel(ctx context.Context,
 	req OpenChannelReq) (*wire.OutPoint, error) {
+
+	if err := c.WaitForSync(ctx, req.Source); err != nil {
+		return nil, err
+	}
 
 	connected, err := c.PeerConnected(ctx, req.Source, req.Dest)
 	if err != nil {
