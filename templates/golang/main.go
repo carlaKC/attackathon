@@ -52,11 +52,14 @@ func main() {
 		return nil
 	}
 
-	if err := cleanup(); err != nil {
-		log.Fatalf("Could not clean up channels: %v", err)
-	}
+        // Always cleanup at the end of our run.
+	defer func() {
+		if err := cleanup(); err != nil {
+			log.Fatalf("Could not clean up channels: %v", err)
+		}
 
-	log.Println("Waiting for threads to shutdown")
-	cancel()
-	jammer.wg.Wait()
+		log.Println("Waiting for threads to shutdown")
+		cancel()
+		jammer.wg.Wait()
+	}()
 }
