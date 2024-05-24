@@ -52,13 +52,13 @@ func main() {
 		return nil
 	}
 
-        // Run cleanup on start to get rid of any lingering channels.
-        if err:= cleanup(); err!=nil{
-                log.Fatalf("Could not clean up on start: %v", err)
-                os.Exit(1)
-        }
+	// Run cleanup on start to get rid of any lingering channels.
+	if err := cleanup(); err != nil {
+		log.Fatalf("Could not clean up on start: %v", err)
+		os.Exit(1)
+	}
 
-        // Always cleanup at the end of our run.
+	// Always cleanup at the end of our run.
 	defer func() {
 		if err := cleanup(); err != nil {
 			log.Fatalf("Could not clean up channels: %v", err)
@@ -68,4 +68,9 @@ func main() {
 		cancel()
 		jammer.wg.Wait()
 	}()
+
+        // Temporarily fixing to a single target peer.
+	if err := runAttack(ctx, graph, jammer, target, "3"); err != nil {
+		log.Fatalf("Attack error: %v", err)
+	}
 }
