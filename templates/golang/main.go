@@ -52,6 +52,12 @@ func main() {
 		return nil
 	}
 
+        // Run cleanup on start to get rid of any lingering channels.
+        if err:= cleanup(); err!=nil{
+                log.Fatalf("Could not clean up on start: %v", err)
+                os.Exit(1)
+        }
+
         // Always cleanup at the end of our run.
 	defer func() {
 		if err := cleanup(); err != nil {
