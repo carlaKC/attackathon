@@ -284,3 +284,21 @@ func (c *GraphHarness) CloseAllChannels(ctx context.Context, node int,
 	return nil
 
 }
+
+// LookupByAlias looks up a node by its alias in the graph
+func (c *GraphHarness) LookupByAlias(ctx context.Context, alias string) (
+	*lndclient.Node, error) {
+
+	graph, err := c.LndNodes.GetNode(1).Client.DescribeGraph(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, node := range graph.Nodes {
+		if alias == node.Alias {
+			return &node, nil
+		}
+	}
+
+	return nil, fmt.Errorf("node: %v not found", alias)
+}

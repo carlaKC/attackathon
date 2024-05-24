@@ -73,4 +73,9 @@ func main() {
 		cancel()
 		jammer.wg.Wait()
 	}()
+
+	// Temporarily fixing to a single target peer.
+	if err := runAttack(ctx, graph, jammer, target, "3"); err != nil {
+		log.Fatalf("Attack error: %v", err)
+	}
 }
