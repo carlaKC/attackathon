@@ -21,7 +21,7 @@ spec:
         -logtimemicros=1 -capturemessages=1 -rpcallowip=0.0.0.0/0 -rpcbind=0.0.0.0
         -fallbackfee=0.00001000 -listen=1 -rpcuser=warnet_user -rpcpassword=2themoon
         -rpcport=18443 -zmqpubrawblock=tcp://0.0.0.0:28332 -zmqpubrawtx=tcp://0.0.0.0:28333
-        -uacomment=w0 -addnode=bitcoind-tank-000000.warnet
+        -uacomment=w0 -addnode=warnet-tank-000000-service.warnet
     image: bitcoindevproject/bitcoin:26.0
     imagePullPolicy: IfNotPresent
     livenessProbe:
