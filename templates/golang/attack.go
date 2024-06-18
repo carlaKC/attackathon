@@ -13,6 +13,13 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 	jammer *JammingHarness, targetNode route.Vertex,
 	targetPeerAlias string) error {
 
+	// Make sure that we're synced to the graph before starting attack.
+	for i := 0; i < 3; i++ {
+		if err := graph.WaitForSync(ctx, 0); err != nil {
+			return fmt.Errorf("node: %v sync: %w", i, err)
+		}
+	}
+
 	node, err := graph.LookupByAlias(ctx, targetPeerAlias)
 	if err != nil {
 		return err
