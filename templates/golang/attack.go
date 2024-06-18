@@ -42,7 +42,148 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 
 	log.Printf("Reputation building endorsed: %v", endorsed)
 
+	// Once endorsement has been built up, we've at least reached the
+	// threshold reputation required to get a htlc endorsed. We'll now
+	// pre-pay the amount of fees required to get all of our htlcs in the
+	// protected bucket endorsed. We need this because we account for HTLC
+	// opportunity cost as they're added in-flight, so we need a buffer of
+	// fees to get many HTLCs endorsed at once.
+	if err := prepayHTLCs(ctx, jammer, targetNode); err != nil {
+		return fmt.Errorf("prepay htlcs: %w", err)
+	}
+
 	return nil
+}
+
+func prepayHTLCs(ctx context.Context, j *JammingHarness,
+	target route.Vertex) error {
+
+	// First, get the route that we'll use for this HTLC.
+	probeAmt := lnwire.MilliSatoshi(400_000)
+	zeroToTwo, err := j.LndNodes.GetNode(0).Client.QueryRoutes(
+		ctx,
+		lndclient.QueryRoutesRequest{
+			PubKey:       j.LndNodes.GetNode(2).NodePubkey,
+			AmtMsat:      probeAmt,
+			FeeLimitMsat: lnwire.MaxMilliSatoshi,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("0 -> 2: %w", err)
+	}
+
+	costPerHTLC, err := getHTLCPrepay(zeroToTwo.Hops, target)
+	if err != nil {
+		return fmt.Errorf("cost per htlc: %w", err)
+	}
+
+	log.Printf("HTLC opportunity cost: %v", costPerHTLC)
+
+	// Prepay enough to get all HTLCs in the protected resources endorsed.
+	// TODO: this assumes that we're splitting 50/50.
+	total := costPerHTLC * 483 / 2
+
+	return payFeeTotal(ctx, total, target, j)
+}
+
+func payFeeTotal(ctx context.Context, totalPayable lnwire.MilliSatoshi,
+	target route.Vertex, j *JammingHarness) error {
+
+	pmtAmt := lnwire.MilliSatoshi(555_000_000)
+	route, err := j.LndNodes.GetNode(0).Client.QueryRoutes(
+		ctx,
+		lndclient.QueryRoutesRequest{
+			PubKey:       j.LndNodes.GetNode(1).NodePubkey,
+			AmtMsat:      pmtAmt,
+			FeeLimitMsat: lnwire.MaxMilliSatoshi,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("0 -> 1: %w", err)
+	}
+
+	req0 := JammingPaymentReq{
+		AmtMsat:   pmtAmt,
+		SourceIdx: 0,
+		DestIdx:   1,
+		// We don't need to endorse because we get reputation for fast
+		// resolution.
+		EndorseOutgoing: false,
+		Settle:          true,
+	}
+
+	// TODO: we shouldn't allow overpayment to contribute to reputation,
+	// but for now we can save ourselves the hassle of multiple payments.
+	for _, hop := range route.Hops {
+		if *hop.PubKey == target {
+			hop.FeeMsat += totalPayable
+		}
+	}
+	route.TotalFeesMsat += totalPayable
+	route.TotalAmtMsat += totalPayable
+
+	log.Printf("Prepaying: %v fee on amount %v with %v per payment", totalPayable,
+		route.TotalAmtMsat, route.TotalFeesMsat)
+
+	resp0, err := j.JammingPaymentRoute(ctx, req0, *route)
+	if err != nil {
+		return fmt.Errorf("0->1: %w", err)
+	}
+
+	select {
+	case resp := <-resp0:
+		if resp.SendFailure != lnrpc.PaymentFailureReason_FAILURE_REASON_NONE {
+			return fmt.Errorf("prepay failed: %v",
+				resp.SendFailure)
+		}
+
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	return nil
+}
+
+func getHTLCPrepay(route []*lndclient.Hop, target route.Vertex) (
+	lnwire.MilliSatoshi, error) {
+
+	var (
+		targetIncomingHop *lndclient.Hop
+		targetOutgoingHop *lndclient.Hop
+	)
+	for _, hop := range route {
+		// If we've just set our incoming hop, the next one is our
+		// outgoing hop.
+		if targetIncomingHop != nil {
+			targetOutgoingHop = hop
+			break
+		}
+
+		// TODO: if pubkey isn't set in hops we need further lookups.
+		if *hop.PubKey == target {
+			targetIncomingHop = hop
+		}
+	}
+
+	if targetIncomingHop == nil {
+		return 0, fmt.Errorf("could not find incoming target hop in: %v"+
+			"for node: %v", route, target)
+	}
+
+	if targetOutgoingHop == nil {
+		return 0, fmt.Errorf("could not find outgoing target hop in: %v"+
+			"for node: %v", route, target)
+	}
+
+	fee := targetIncomingHop.FeeMsat
+	cltvDelta := targetIncomingHop.Expiry - targetOutgoingHop.Expiry
+	periods := (cltvDelta * 5 * 60) / 90 // assume 5 min blocks, 90s period
+	oc := fee * lnwire.MilliSatoshi(periods)
+
+	log.Printf("opportunity cost: %v for fee: %v with delta: %v over %v "+
+		"periods", oc, fee, cltvDelta, periods)
+
+	return oc, nil
 }
 
 // BuildReputation sends payments between LND0 and LND1, proving to determine
