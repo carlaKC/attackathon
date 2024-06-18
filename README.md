@@ -52,6 +52,11 @@ peers looking to use the channel do not have access to the
 **projected slots** that are reserved for high reputation peers. This 
 may be abused in various ways, and we encourage you to explore them!
 
+Note: There is a special case of channel jamming for trimmed HTLCs.
+If the node implementation supports `max_dust_htlc_exposure_msat`, this
+introduces an absolute limit in satoshis on the number of trimmed HTLCs
+a target node can forward concurrently.
+
 ### Development Environment
 
 The attack you develop will be tested against a [warnet](https://warnet.dev/)
