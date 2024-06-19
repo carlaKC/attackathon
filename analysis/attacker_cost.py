@@ -59,6 +59,7 @@ def extract_data(payment):
     })
 
 def main(command, max_payments_per_call=10000):
+def get_payment_cost(command, max_payments_per_call=10000):
     result = paginate_lncli_listpayments(command, max_payments_per_call)
     payment_count = len(result['payments'])
     
@@ -87,5 +88,5 @@ if __name__ == "__main__":
     parser.add_argument('--max_payments_per_call', type=int, default=10000, help='maximum number of payments per call')
     args = parser.parse_args()
 
-    result = main(args.command, args.max_payments_per_call)
+    result = get_payment_cost(args.command, args.max_payments_per_call)
     print(json.dumps(result, indent=4))
