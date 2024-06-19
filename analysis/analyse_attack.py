@@ -63,3 +63,7 @@ if __name__ == "__main__":
 
     for key, value in results.items():
         print(f"{key}: {value}")
+
+    print()
+    revenue = attacker_cost.get_revenue(node_id)
+    print(f"Target revenue under attack: {revenue} msat")
