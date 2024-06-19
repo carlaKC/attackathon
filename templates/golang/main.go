@@ -35,32 +35,34 @@ func main() {
 		LndNodes: lnds,
 	}
 
-	cleanup := func() error {
+	cleanup := func(force bool) error {
 		log.Println("Cleaning up opened channels for all nodes")
-		if err := graph.CloseAllChannels(ctx, 0); err != nil {
+		if err := graph.CloseAllChannels(ctx, 0, force); err != nil {
 			return err
 		}
 
-		if err := graph.CloseAllChannels(ctx, 1); err != nil {
+		if err := graph.CloseAllChannels(ctx, 1, force); err != nil {
 			return err
 		}
 
-		if err := graph.CloseAllChannels(ctx, 2); err != nil {
+		if err := graph.CloseAllChannels(ctx, 2, force); err != nil {
 			return err
 		}
 
 		return nil
 	}
 
-	// Run cleanup on start to get rid of any lingering channels.
-	if err := cleanup(); err != nil {
+	// Run cleanup on start to get rid of any lingering channels. Force
+	// close to clean up any old state from an unsuccessful run.
+	if err := cleanup(true); err != nil {
 		log.Fatalf("Could not clean up on start: %v", err)
 		os.Exit(1)
 	}
 
-	// Always cleanup at the end of our run.
+	// Always cleanup at the end of our run. Do not force close because
+	// we expect all payments to be resolved.
 	defer func() {
-		if err := cleanup(); err != nil {
+		if err := cleanup(false); err != nil {
 			log.Fatalf("Could not clean up channels: %v", err)
 		}
 
