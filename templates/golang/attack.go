@@ -155,11 +155,11 @@ func getSlowJamHold(ctx context.Context, route *lndclient.QueryRoutesResponse,
 	holdTime := time.Duration(relativeHold) * 5 * time.Minute
 
 	// Our goal is to hold for an hour, so we'll pick the minimum.
-	if holdTime < time.Hour {
+	if holdTime < time.Minute*10 {
 		return holdTime, nil
 	}
 
-	return time.Hour, nil
+	return time.Minute * 10, nil
 }
 
 func jamProtected(ctx context.Context, j *JammingHarness) ([]jamPair, error) {
