@@ -58,7 +58,38 @@ def extract_data(payment):
         'total_fees_msat': 0
     })
 
-def main(command, max_payments_per_call=10000):
+def get_channel_cost():
+    # First make sure there's nothing open or pending, we don't have code for this.
+    no_open_or_pending()
+
+def closed_channels_fees():
+    # Get closed channels information
+    closed_channels = run_lncli_command(["lncli", "closedchannels"])
+
+    # Iterate over each channel and print funding and closing transactions
+    for channel in closed_channels['channels']:
+        channel_point = channel['channel_point']
+        funding_txid = channel_point.split(":")[0]
+        closing_txid = channel['closing_tx_hash']
+
+def no_open_or_pending():
+    data = run_lncli_command('lncli listchannels')
+    
+    # Check if there are any channels
+    if 'channels' in data and len(data['channels']) > 0:
+        raise ValueError("Error: There are active channels.")
+    else:
+        print("No active channels.")
+
+    # Check pending channels
+    pending_channels_data = run_lncli_command('lncli pendingchannels')
+    
+    if (len(pending_channels_data.get('pending_open_channels', [])) > 0 or
+        len(pending_channels_data.get('pending_closing_channels', [])) > 0 or
+        len(pending_channels_data.get('pending_force_closing_channels', [])) > 0 or
+        len(pending_channels_data.get('waiting_close_channels', [])) > 0):
+        raise ValueError("Error: There are pending channels.")
+
 def get_payment_cost(command, max_payments_per_call=10000):
     result = paginate_lncli_listpayments(command, max_payments_per_call)
     payment_count = len(result['payments'])
