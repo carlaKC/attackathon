@@ -63,3 +63,6 @@ if __name__ == "__main__":
 
     for key, value in results.items():
         print(f"{key}: {value}")
+
+    for i, command in enumerate(lncli_commands):
+        attacker_cost.closed_channels_fees(command)

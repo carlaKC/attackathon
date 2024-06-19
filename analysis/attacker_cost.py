@@ -3,6 +3,15 @@ import json
 import pandas as pd
 import argparse
 
+def run_bitcoincli_command(bitcoin_cli_command):
+    full_command = f"kubectl exec -it flagship -n warnet-armada -- bitcoin-cli {bitcoin_cli_command}"
+    result = subprocess.run(full_command, capture_output=True, text=True, shell=True)
+    
+    if result.returncode != 0:
+        raise Exception(f"bitcoin-cli command failed: {result.stderr}")
+    
+    return result.stdout
+
 def run_lncli_command(command):
     result = subprocess.run(
         command.split(),
@@ -58,13 +67,44 @@ def extract_data(payment):
         'total_fees_msat': 0
     })
 
+def get_previous_output_value(txid, vout):
+    raw_output = run_bitcoincli_command(f"gettxout {txid} {vout}")
+    if raw_output.strip() == "null":
+        raise Exception(f"Output {vout} of transaction {txid} is spent or does not exist")
+
+    try:
+        output = json.loads(raw_output)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Failed to parse JSON from output: {e}\nRaw Output: {raw_output}")
+
+    return output['value']
+
+def calculate_transaction_fee(txid):
+    # Step 1: Get the raw transaction details
+    raw_transaction = run_bitcoincli_command(f"getrawtransaction {txid} true")
+    transaction = json.loads(raw_transaction)
+    
+    total_input = 0.0
+    total_output = sum([vout['value'] for vout in transaction['vout']])
+    
+    # Step 2: Calculate total input by looking up previous outputs
+    for vin in transaction['vin']:
+        previous_txid = vin['txid']
+        vout_index = vin['vout']
+        input_value = get_previous_output_value(previous_txid, vout_index)
+        total_input += input_value
+    
+    # Step 3: Calculate the fee
+    fee = total_input - total_output
+    
+    return fee
 def get_channel_cost():
     # First make sure there's nothing open or pending, we don't have code for this.
     no_open_or_pending()
 
-def closed_channels_fees():
+def closed_channels_fees(command):
     # Get closed channels information
-    closed_channels = run_lncli_command(["lncli", "closedchannels"])
+    closed_channels = run_lncli_command(f'{command} closedchannels')
 
     # Iterate over each channel and print funding and closing transactions
     for channel in closed_channels['channels']:
@@ -72,8 +112,11 @@ def closed_channels_fees():
         funding_txid = channel_point.split(":")[0]
         closing_txid = channel['closing_tx_hash']
 
-def no_open_or_pending():
-    data = run_lncli_command('lncli listchannels')
+        print(calculate_transaction_fee(funding_txid))
+        print(calculate_transaction_fee(closing_txid))
+
+def no_open_or_pending(command):
+    data = run_lncli_command(f'{command} listchannels')
     
     # Check if there are any channels
     if 'channels' in data and len(data['channels']) > 0:
