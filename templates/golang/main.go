@@ -75,7 +75,7 @@ func main() {
 	}()
 
 	// Temporarily fixing to a single target peer.
-	if err := runAttack(ctx, graph, jammer, target, "3"); err != nil {
+	if err := runAttack(ctx, graph, jammer, target, "6"); err != nil {
 		log.Fatalf("Attack error: %v", err)
 	}
 }
