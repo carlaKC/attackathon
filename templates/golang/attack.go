@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/lightninglabs/lndclient"
@@ -60,6 +61,22 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 	// While WIP, cancel these payments back for easier cleanup.
 	log.Printf("Dispatched: %v general slow jams", len(chans))
 
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		log.Printf("Waiting for: %v general slow jams", len(chans))
+		n, err := waitForJams(ctx, chans)
+		if err != nil {
+			log.Printf("Wait for general jams: %v", err)
+		}
+
+		log.Printf("Of %v general jams, %v reached destination",
+			len(chans), n)
+	}()
+
 	protectedChans, err := jamProtected(ctx, jammer)
 	if err != nil {
 		return fmt.Errorf("slow jam protected: %w", err)
@@ -67,29 +84,52 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 
 	log.Printf("Dispatched: %v protected slow jams", len(chans))
 
-	for i, jam := range chans {
-		log.Printf("Canceling slowjam: %v early", i)
-		close(jam.req.EarlySettle)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 
-		select {
-		case <-jam.resp:
-		case <-ctx.Done():
-			return ctx.Err()
+		log.Printf("Waiting for: %v protected slow jams", len(protectedChans))
+		n, err := waitForJams(ctx, protectedChans)
+		if err != nil {
+			log.Printf("Wait for protected jams: %v", err)
 		}
-	}
 
-	for i, jam := range protectedChans {
-		log.Printf("Canceling protected slowjam: %v early", i)
-		close(jam.req.EarlySettle)
+		log.Printf("Of %v protected jams, %v reached destination",
+			len(protectedChans), n)
+	}()
 
-		select {
-		case <-jam.resp:
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
+	log.Printf("Waiting for slow jams to complete")
+	wg.Wait()
 
 	return nil
+}
+
+// waitForJams waits for a set of jamming payments to complete. We just wait
+// in the order that they were dispatched, as this is the order we'd expect
+// them to resolve if the payment reaches the holding party. It's not critical
+// if some payments are waiting in this queue to be seen as resolved.
+func waitForJams(ctx context.Context, jams []jamPair) (int, error) {
+	var (
+		err         error
+		reachedDest int
+	)
+
+	for _, jam := range jams {
+		select {
+		case r := <-jam.resp:
+			if len(r.Htlcs) > 0 {
+				reachedDest++
+			}
+
+		// Even if we error out, we want to cancel all of our payments.
+		case <-ctx.Done():
+			err = ctx.Err()
+		}
+
+		close(jam.req.EarlySettle)
+	}
+
+	return reachedDest, err
 }
 
 type jamPair struct {
