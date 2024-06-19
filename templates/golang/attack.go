@@ -268,12 +268,14 @@ func OpenChannels(ctx context.Context, graph *GraphHarness, targetNode,
 
 	log.Printf("Opened channel with target node (%s) from LND-1", targetNode)
 
-	// LND-2 -> Peer (we don't need any liquidity)
+	// LND-2 -> Peer
 	chan3, err := graph.OpenChannel(ctx, OpenChannelReq{
 		Source:      2,
 		Dest:        targetPeer,
 		CapacitySat: chanCap,
-		PushAmt:     chanCap - 10000,
+		// We still give ourselves some liquidity so that we don't
+		// run into fee spike buffer issues.
+		PushAmt: chanCap / 2,
 	})
 	if err != nil {
 		return fmt.Errorf("LND-2 -> target peer: %v", err)
