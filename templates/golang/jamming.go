@@ -12,6 +12,7 @@ import (
 	"github.com/lightningnetwork/lnd/lnrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/invoicesrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/routerrpc"
+	"github.com/lightningnetwork/lnd/lntypes"
 	"github.com/lightningnetwork/lnd/lnwire"
 )
 
@@ -75,6 +76,10 @@ type SendPaymentFunc func(ctx context.Context, inv string) (
 	<-chan lndclient.PaymentStatus, <-chan error, error)
 
 // JammingPaymentRoute performs a jamming payment using the route provided.
+// Note that it may progress the expiry heights in the route to match the
+// current height and invoice generated to allow using of "stale" routes to
+// make payments when blocks are mined between route querying and payment
+// sending.
 func (j *JammingHarness) JammingPaymentRoute(ctx context.Context,
 	req JammingPaymentReq, route lndclient.QueryRoutesResponse) (
 	<-chan JammingPaymentResp, error) {
@@ -89,11 +94,20 @@ func (j *JammingHarness) JammingPaymentRoute(ctx context.Context,
 
 		source := j.LndNodes.GetNode(req.SourceIdx)
 
-		b11, err := source.Client.DecodePaymentRequest(ctx, inv)
+		// There are some fields in the payment request that are not
+		// surfaced in the lndclient wrapper, so we manually create a
+		// raw client here.
+		client := lnrpc.NewLightningClient(source.ClientConn)
+		macCtx, err := source.WithMacaroonAuthForService(
+			ctx, lndclient.AdminServiceMac,
+		)
+
+		b11, err := client.DecodePayReq(macCtx, &lnrpc.PayReqString{
+			PayReq: inv,
+		})
 		if err != nil {
 			return nil, nil, err
 		}
-
 		// Copy everything because we're re-using this route over and
 		// over (hops are common reference, so we just copy everything).
 		pmtRoute := lndclient.QueryRoutesResponse{
@@ -119,14 +133,19 @@ func (j *JammingHarness) JammingPaymentRoute(ctx context.Context,
 		// Each invoice we pay will have a different MPP record, so
 		// we set it for our set route here.
 		pmtRoute.Hops[len(pmtRoute.Hops)-1].MppRecord = &lnrpc.MPPRecord{
-			PaymentAddr:  b11.PaymentAddress[:],
-			TotalAmtMsat: int64(b11.Value),
+			PaymentAddr:  b11.PaymentAddr,
+			TotalAmtMsat: int64(b11.NumMsat),
+		}
+
+		hash, err := lntypes.MakeHashFromStr(b11.PaymentHash)
+		if err != nil {
+			return nil, nil, err
 		}
 
 		pmtChan, errChan := source.Router.SendToRouteV2(
 			ctx,
 			lndclient.SendToRouteRequest{
-				PaymentHash: b11.Hash,
+				PaymentHash: hash,
 				Route:       pmtRoute,
 				Endorsed:    endorse,
 			},
