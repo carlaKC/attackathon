@@ -1,6 +1,6 @@
 import subprocess
 import csv
-import attacker_cost
+import costs
 import tempfile
 import os
 import sys
@@ -101,7 +101,7 @@ if __name__ == "__main__":
     total_upfront = 0
 
     for i, command in enumerate(lncli_commands):
-        results[f'lncli{i}'] = attacker_cost.main(command)
+        results[f'lncli{i}'] = costs.main(command)
         total_payment_count += results[f'lncli{i}']['payment_count']
         total_success += results[f'lncli{i}']['success']
         total_upfront += results[f'lncli{i}']['upfront']
@@ -112,7 +112,7 @@ if __name__ == "__main__":
         print(f"{key}: {value}")
 
     print()
-    revenue = attacker_cost.get_revenue(node_id)
+    revenue = costs.get_revenue(node_id)
     print(f"Target revenue under attack: {revenue} msat")
 
     projected = get_projected_revenue(network_name, node_id, runtime_ns)
