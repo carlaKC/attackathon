@@ -1,4 +1,5 @@
 import subprocess
+import csv
 import attacker_cost
 import tempfile
 import os
@@ -36,11 +37,45 @@ def save_channel_list(node_id):
         execute_command_and_save_output(command, temp_filename)
         return temp_filename
 
+def get_projected_revenue(network_name, node_id, revenue_period_ns):
+    file_path = os.path.join("data", network_name, "projected.csv")
+    total_fees = 0
+    timestamp_limit = None
+
+    with open(file_path, 'r') as file:
+        reader = csv.DictReader(file)
+        for row in reader:
+            incoming_amt = int(row['incoming_amt'])
+            outgoing_amt = int(row['outgoing_amt'])
+            forwarding_alias = row['forwarding_alias']
+            incoming_add_ts = int(row['incoming_add_ts'])
+            incoming_remove_ts = int(row['incoming_remove_ts'])
+           
+            # We want to only get entries for the period that we've defined to have a way to compare revenue to what we got in the simulation 
+            # that ran for revenue_period_ns. We don't have a start time for this projected data, so we just grab our first timestamp as the 
+            # start. This is imperfect, and may lead to us over-estimating revenue without an attack (especially if there was a long wait 
+            # for the first payment to occur). This could possibly be improved by including the start time in the file name so we can get 
+            # an exact start, but is okay for now.
+            # 
+            # We can't use actual timestamps here, because this data was generated once-off and has old timestamps (hasn't been "progressed"
+            # to current times like we do for bootstrapped data, as this isn't actually necessary).
+            if timestamp_limit is None:
+                timestamp_limit = incoming_add_ts + revenue_period_ns
+
+            if incoming_add_ts >= timestamp_limit:
+                break
+            
+            if forwarding_alias == node_id and incoming_remove_ts < timestamp_limit:
+                total_fees += (incoming_amt - outgoing_amt)
+    
+    return total_fees
+
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python analyse_attack.py <network_name>")
+    if len(sys.argv) != 3:
+        print("Usage: python analyse_attack.py <network_name> <attack_runtime_ns>")
         sys.exit(1)
     network_name = sys.argv[1]
+    runtime_ns = int(sys.argv[2])
     
     # Construct the file path
     file_path = os.path.join("data", network_name, "target.txt")
@@ -79,3 +114,6 @@ if __name__ == "__main__":
     print()
     revenue = attacker_cost.get_revenue(node_id)
     print(f"Target revenue under attack: {revenue} msat")
+
+    projected = get_projected_revenue(network_name, node_id, runtime_ns)
+    print(f"Target revenue without attack: {projected} msat")
