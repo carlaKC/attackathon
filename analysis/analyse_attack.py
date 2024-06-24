@@ -101,7 +101,7 @@ if __name__ == "__main__":
     total_upfront = 0
 
     for i, command in enumerate(lncli_commands):
-        results[f'lncli{i}'] = costs.main(command)
+        results[f'lncli{i}'] = costs.get_attacker_costs(command)
         total_payment_count += results[f'lncli{i}']['payment_count']
         total_success += results[f'lncli{i}']['success']
         total_upfront += results[f'lncli{i}']['upfront']

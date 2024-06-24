@@ -82,7 +82,7 @@ def extract_data(payment):
         'total_fees_msat': 0
     })
 
-def main(command, max_payments_per_call=10000):
+def get_attacker_costs(command, max_payments_per_call=10000):
     result = paginate_lncli_listpayments(command, max_payments_per_call)
     payment_count = len(result['payments'])
     
@@ -104,12 +104,3 @@ def main(command, max_payments_per_call=10000):
         'success': success,
         'upfront': upfront
     }
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('command', help='lncli command to be executed')
-    parser.add_argument('--max_payments_per_call', type=int, default=10000, help='maximum number of payments per call')
-    args = parser.parse_args()
-
-    result = main(args.command, args.max_payments_per_call)
-    print(json.dumps(result, indent=4))
