@@ -80,11 +80,48 @@ else
     git remote remove carla
     git checkout main > /dev/null 2>&1
 
-    runtime=$((duration / 1000))
-    echo "Generating historical data for $duration seconds, will take: $runtime seconds with speedup of 1000"
-    sim-cli --clock-speedup 1000 -s "$simfile" -t "$duration"
-	
-    cp results/htlc_forwards.csv "$raw_data"
+    # We want to generate two types of data here (TODO: fix seed):
+    # 1. Bootstrapping data for the network, which provides historical reputations
+    # 2. Projected revenue, which provides simulated network traffic without an attack present
+    # Everything before ts_division is (1) and everything after is (2)
+    sim_time=$(( duration + 14 * 24 * 60 * 60 ))
+    ts_division=$(( ($(date +%s) + duration) * 1000000000 ))
+
+    runtime=$((sim_time / 1000))
+    echo "Generating historical and projected data for $sim_time seconds, will take: $runtime seconds with speedup of 1000"
+    sim-cli --clock-speedup 1000 -s "$simfile" -t "$sim_time"
+
+    # Once data is generated, we'll split it between historical bootstrap and projected revenue.
+    input_csv="results/htlc_forwards.csv"
+
+    # Filenames for output CSVs
+    file_lt_division="historical_data.csv"
+    file_ge_division="projected_forwards.csv"
+
+    # Header for the output CSVs
+    header=$(head -n 1 "$input_csv")
+
+    # Creating new CSV files with headers
+    echo "$header" > "$file_lt_division"
+    echo "$header" > "$file_ge_division"
+
+    # Processing each line in the input CSV, starting from the second line (skipping header)
+    tail -n +2 "$input_csv" | while IFS=',' read -r incoming_amt incoming_expiry incoming_add_ts incoming_remove_ts \
+                                    outgoing_amt outgoing_expiry outgoing_add_ts outgoing_remove_ts \
+                                    forwarding_node forwarding_alias chan_in chan_out; do
+    # Determine which file to write to based on condition
+    if [ "$outgoing_remove_ts" -lt "$ts_division" ]; then
+        echo "$incoming_amt,$incoming_expiry,$incoming_add_ts,$incoming_remove_ts,$outgoing_amt,$outgoing_expiry,$outgoing_add_ts,$outgoing_remove_ts,$forwarding_node,$forwarding_alias,$chan_in,$chan_out" >> "$file_lt_division"
+    else
+        echo "$incoming_amt,$incoming_expiry,$incoming_add_ts,$incoming_remove_ts,$outgoing_amt,$outgoing_expiry,$outgoing_add_ts,$outgoing_remove_ts,$forwarding_node,$forwarding_alias,$chan_in,$chan_out" >> "$file_ge_division"
+    fi
+    done
+
+    # Copy bootstraped data into place for raw data to build circuitbreaker data.
+    mv "$file_lt_division" "$raw_data"
+
+    # Copy remaining data into folder for simulation so that analysis can use projected data for comparisons.
+    mv "$file_ge_division" "$sim_files/projected.csv"
     cd ..
 fi
 

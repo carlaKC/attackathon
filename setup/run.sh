@@ -22,7 +22,15 @@ export LND_2_MACAROON="/credentials/lnd2-admin.macaroon"
 
 export TARGET=$(cat target.txt)
 
+start_time_s=$(date +%s)
+echo "Starting attack at: $start_time_s!"
+
 # Fill in code here to:
 # - Clone your repo
 # - Install your program
 # - Run it with the certs/macaroons provided above
+
+# Do not delete this!
+end_time_s=$(date +%s)
+runtime=$(( ($end_time_s - $start_time_s) * 1000000000 ))
+echo "Attack duration: $runtime ns"
