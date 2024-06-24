@@ -167,8 +167,10 @@ Attacks will be assessed using the following measures:
 - When compared to the operation of the network _without_ a jamming 
   attack, how many honest htlcs were dropped as a result of the attack?
 
-A work-in-progress analysis script can be run using:
-`python3 analysis/analyse_attack.py`
+A work-in-progress analysis script can be run from within the 
+attackathon repo using:
+
+`python3 analysis/analyse_attack.py ln_10`
 
 ### HackNicePlz
 

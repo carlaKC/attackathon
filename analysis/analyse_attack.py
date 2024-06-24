@@ -1,6 +1,7 @@
 import subprocess
 import attacker_cost
 import tempfile
+import os
 import sys
 import target_jammed
 
@@ -37,9 +38,20 @@ def save_channel_list(node_id):
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("Usage: python script.py <node_id>")
+        print("Usage: python analyse_attack.py <network_name>")
         sys.exit(1)
-    node_id = sys.argv[1]
+    network_name = sys.argv[1]
+    
+    # Construct the file path
+    file_path = os.path.join("data", network_name, "target.txt")
+
+    if os.path.exists(file_path):
+        with open(file_path, 'r') as file:
+            node_id = file.read().strip()
+            print(f"Running attack analysis for target node: {node_id}")
+    else:
+        print(f"The network at {file_path} does not exist.")
+        sys.exit(1)
 
     padded_node_id = node_id.zfill(6)   
     forwarding_hist_file = save_forwarding_history(padded_node_id)
