@@ -93,6 +93,10 @@ func (j *JammingHarness) JammingPaymentRoute(ctx context.Context,
 		<-chan lndclient.PaymentStatus, <-chan error, error) {
 
 		source := j.LndNodes.GetNode(req.SourceIdx)
+		info, err := source.Client.GetInfo(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
 
 		// There are some fields in the payment request that are not
 		// surfaced in the lndclient wrapper, so we manually create a
@@ -108,10 +112,24 @@ func (j *JammingHarness) JammingPaymentRoute(ctx context.Context,
 		if err != nil {
 			return nil, nil, err
 		}
+
+		// Update the expiry of the pre-selected route to match the
+		// invoice's requirements.
+		var (
+			invExpiry   = info.BlockHeight + uint32(b11.CltvExpiry)
+			routeExpiry = route.Hops[len(route.Hops)-1].Expiry
+
+			heightDiff uint32 = 0
+		)
+
+		if invExpiry > routeExpiry {
+			heightDiff = invExpiry - routeExpiry
+		}
+
 		// Copy everything because we're re-using this route over and
 		// over (hops are common reference, so we just copy everything).
 		pmtRoute := lndclient.QueryRoutesResponse{
-			TotalTimeLock: route.TotalTimeLock,
+			TotalTimeLock: route.TotalTimeLock + heightDiff,
 			TotalFeesMsat: route.TotalFeesMsat,
 			TotalAmtMsat:  route.TotalAmtMsat,
 		}
@@ -120,7 +138,7 @@ func (j *JammingHarness) JammingPaymentRoute(ctx context.Context,
 			pmtRoute.Hops = append(pmtRoute.Hops,
 				&lndclient.Hop{
 					ChannelID:        hop.ChannelID,
-					Expiry:           hop.Expiry,
+					Expiry:           hop.Expiry + heightDiff,
 					AmtToForwardMsat: hop.AmtToForwardMsat,
 					FeeMsat:          hop.FeeMsat,
 					PubKey:           hop.PubKey,
