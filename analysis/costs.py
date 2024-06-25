@@ -16,7 +16,7 @@ def run_lncli_command(command):
     
     return json.loads(result.stdout.decode('utf-8'))
 
-def get_revenue(node_id, max_entries=10):
+def get_revenue(node_id, max_entries=10000):
     index_offset = 0
     total_fees = 0
     while True:
@@ -28,7 +28,6 @@ def get_revenue(node_id, max_entries=10):
         forwarding_events = response.get('forwarding_events', [])
         for fwd in forwarding_events:
             total_fees += int(fwd.get('fee_msat'))
-
         num_forwards_returned = len(forwarding_events)
         
         if num_forwards_returned < max_entries:
@@ -61,10 +60,7 @@ def paginate_lncli_listpayments(command, max_payments_per_call=10):
         # Prepare for the next call
         index_offset = last_index_offset
     
-    return {
-        'payments': all_payments,
-    }
-
+    return all_payments
 
 def process_attacker_payments(payments, target_pubkey):
     results = []
@@ -103,11 +99,10 @@ def process_attacker_payments(payments, target_pubkey):
             'attacker_unconditional_msat': attacker_unconditional_msat *0.01,
             'target_total': target_total,
             'target_success_msat': target_success_msat,
-            'target_unconditional_msat': target_unconditional_msat * 0.001,
+            'target_unconditional_msat': target_unconditional_msat * 0.01,
     }
 
 def get_attacker_costs(command, target_pubkey, max_payments_per_call=10000):
     result = paginate_lncli_listpayments(command, max_payments_per_call)
     
-    return process_attacker_payments(payments, target_pubkey)
-
+    return process_attacker_payments(result, target_pubkey)

@@ -1,5 +1,6 @@
 import subprocess
 import csv
+import json
 import costs
 import tempfile
 import os
@@ -114,7 +115,6 @@ if __name__ == "__main__":
 
     target_pubkey = get_pubkey(node_id)
 
-    results = {}
     total_payment_count = 0
     attacker_success_msat = 0
     attacker_unconditional_msat = 0
@@ -124,29 +124,33 @@ if __name__ == "__main__":
     target_unconditional_msat = 0
 
     for i, command in enumerate(lncli_commands):
-        results[f'lncli{i}'] = costs.get_attacker_costs(command, target_pubkey)
+        attacker_costs = costs.get_attacker_costs(command, target_pubkey)
+        print(f"{i}: {attacker_costs}")
+        total_payment_count += attacker_costs['attacker_total']
+        attacker_success_msat += attacker_costs['attacker_success_msat']
+        attacker_unconditional_msat += attacker_costs['attacker_unconditional_msat']
 
-        total_payment_count += results[f'lncli{i}']['attacker_total']
-        attacker_success_msat += results[f'lncli{i}']['attacker_success_msat']
-        attacker_unconditional_msat += results[f'lncli{i}']['attacker_unconditional_msat']
+        target_success_msat += attacker_costs['target_success_msat']
+        target_unconditional_msat += attacker_costs['target_unconditional_msat']
 
-        target_success_msat += results[f'lncli{i}']['target_success_msat']
-        target_unconditional_msat += results[f'lncli{i}']['target_unconditional_msat']
-
-
-    print(f"Attacker sent: {total_payment_count} payments paying {total_success+total_upfront} msat fees\n")
-
-    for key, value in results.items():
-        print(f"{key}: {value}")
-
+    attacker_total = attacker_success_msat + attacker_unconditional_msat
     print()
-
-    revenue = costs.get_target_revenue(node_id, forwarding_hist_file)
-    honest_revenue = revenue - target_success_msat - target_unconditional_msat
-
-    print(f"Target revenue under attack: {revenue} msat")
-    print(f"- Attacker traffic paid: {target_success_msat + target_unconditional_msat}")
-    print(f"- Honest traffic paid: {honest_revenue}")
+    print(f"Attacker sent: {total_payment_count} payments paying {attacker_total} msat fees")
+    print(f"- Success fees: {attacker_success_msat} msat")
+    print(f"- Unconditional fees: {attacker_unconditional_msat} msat\n")
 
     projected = get_projected_revenue(network_name, node_id, runtime_ns)
     print(f"Target revenue without attack: {projected} msat")
+
+    # TODO: include unconditional fees here
+    revenue = costs.get_revenue(node_id)
+    honest_revenue = revenue - target_unconditional_msat - target_success_msat
+
+    print(f"Target revenue under attack: {revenue} msat")
+    print(f"- Success Fees: {revenue} msat")
+    print(f"- Unconditional fees: TODO\n")
+
+    print("Breakdown of target's revenue under attack:")
+    print(f"- Attacker paid: {target_success_msat + target_unconditional_msat} msat")
+    print(f"- Honest traffic paid: {honest_revenue}\n")
+

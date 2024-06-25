@@ -281,8 +281,6 @@ def process_files(forwarding_history_file, channels_file, reputation_thresholds_
 
     changes = times_of_change(with_op2)
     
-    print(f"HTLCs sent {len(pair_schedule_df[pair_schedule_df['eventType'] == 'add'])}")
-
     calc_total_jam(with_op2)
 
 
