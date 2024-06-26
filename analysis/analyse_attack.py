@@ -1,3 +1,6 @@
+import time
+from datetime import datetime
+import re
 import subprocess
 import csv
 import json
@@ -55,6 +58,23 @@ def get_pubkey(node_id):
         print(f"Error parsing JSON output: {e}")
         return None
 
+def execute_kubectl_cmd(command, pod):
+    result = subprocess.run(['kubectl', command, 'pod', pod], stdout=subprocess.PIPE)
+    return result.stdout.decode('utf-8')
+
+def simln_start_time():
+    pod_description = execute_kubectl_cmd('describe', 'warnet-simln')
+
+    match = re.search(r'Started:\s+(.*)', pod_description)
+    if match:
+        started_time_str = match.group(1)
+        dt = datetime.strptime(started_time_str, '%a, %d %b %Y %H:%M:%S %z')
+        unix_timestamp = dt.timestamp()
+        return int(unix_timestamp) * 1e9
+
+    else:
+        raise ValueError("Started time not found in the pod description: {pod_description}")
+
 def get_projected_revenue(network_name, node_id, revenue_period_ns):
     file_path = os.path.join("data", network_name, "projected.csv")
     total_fees = 0
@@ -89,12 +109,22 @@ def get_projected_revenue(network_name, node_id, revenue_period_ns):
     return total_fees
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: python analyse_attack.py <network_name> <attack_runtime_ns>")
+    if len(sys.argv) < 2:
+        print("Usage: python analyse_attack.py <network_name> [attack_runtime_ns]")
         sys.exit(1)
     network_name = sys.argv[1]
-    runtime_ns = int(sys.argv[2])
-    
+
+    # If an end time was provided, use it. Otherwise we'll use the current time as an end time.
+    if len(sys.argv) > 2:
+        end_time = sys.argv[2]
+    else:
+        end_time = time.time_ns()
+
+    # Use the time that sim-ln started as our start time, this is when payments would have started
+    # to flow through the network.
+    start_time = simln_start_time()
+    print(f"Running analysis for period: {start_time} -> {end_time}")
+
     # Construct the file path
     file_path = os.path.join("data", network_name, "target.txt")
 
@@ -138,7 +168,7 @@ if __name__ == "__main__":
     print(f"- Success fees: {attacker_success_msat} msat")
     print(f"- Unconditional fees: {attacker_unconditional_msat} msat\n")
 
-    projected = get_projected_revenue(network_name, node_id, runtime_ns)
+    projected = get_projected_revenue(network_name, node_id, end_time - start_time)
     print(f"Target revenue without attack: {projected} msat")
 
     success_revenue, unconditional_revenue = costs.get_target_revenue(forwarding_hist_file)
