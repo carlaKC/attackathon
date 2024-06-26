@@ -16,7 +16,7 @@ def run_lncli_command(command):
     
     return json.loads(result.stdout.decode('utf-8'))
 
-def get_target_revenue(forwarding_hist_file):
+def get_target_revenue(forwarding_hist_file, start_time_ns, end_time_ns):
     with open(forwarding_hist_file, 'r') as file:
         data = json.load(file)
         
@@ -24,6 +24,12 @@ def get_target_revenue(forwarding_hist_file):
     unconditional_fee_msat = 0
 
     for forward in data['forwards']:
+        if int(forward['addTimeNs']) < start_time_ns:
+            continue
+
+        if int(forward['resolveTimeNs']) > end_time_ns:
+            continue
+
         incoming_amount = int(forward['incomingAmount'])
         outgoing_amount = int(forward['outgoingAmount'])
         fee_msat = incoming_amount - outgoing_amount

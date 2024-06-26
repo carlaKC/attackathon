@@ -171,7 +171,7 @@ if __name__ == "__main__":
     projected = get_projected_revenue(network_name, node_id, end_time - start_time)
     print(f"Target revenue without attack: {projected} msat")
 
-    success_revenue, unconditional_revenue = costs.get_target_revenue(forwarding_hist_file)
+    success_revenue, unconditional_revenue = costs.get_target_revenue(forwarding_hist_file, start_time, end_time)
     target_revenue = success_revenue + unconditional_revenue
     honest_revenue = target_revenue - attacker_to_target_uncond_msat - attacker_to_target_success_msat
 
