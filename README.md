@@ -167,11 +167,14 @@ Attacks will be assessed using the following measures:
 - When compared to the operation of the network _without_ a jamming 
   attack, how many honest htlcs were dropped as a result of the attack?
 
-A work-in-progress analysis script requires your network name and the 
-runtime in nanoseconds that was output by `run.sh`. It can be run from 
-within the attackathon repo:
+A work-in-progress analysis script requires your network name to run. 
+You may optionally provide the end timestamp (unix nano) of your 
+attack to get a more precise comparison period (the present time will 
+otherwise be used as the time of attack).
 
-`python3 analysis/analyse_attack.py ln_10 <runtime_ns>`
+It can be run from within the attackathon repo:
+
+`python3 analysis/analyse_attack.py ln_10 [endtime_ns]`
 
 ### HackNicePlz
 
