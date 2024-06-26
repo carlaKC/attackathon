@@ -120,18 +120,17 @@ if __name__ == "__main__":
     attacker_unconditional_msat = 0
 
     target_total = 0
-    target_success_msat = 0
-    target_unconditional_msat = 0
+    attacker_to_target_success_msat = 0
+    attacker_to_target_uncond_msat = 0
 
     for i, command in enumerate(lncli_commands):
         attacker_costs = costs.get_attacker_costs(command, target_pubkey)
-        print(f"{i}: {attacker_costs}")
         total_payment_count += attacker_costs['attacker_total']
         attacker_success_msat += attacker_costs['attacker_success_msat']
         attacker_unconditional_msat += attacker_costs['attacker_unconditional_msat']
 
-        target_success_msat += attacker_costs['target_success_msat']
-        target_unconditional_msat += attacker_costs['target_unconditional_msat']
+        attacker_to_target_success_msat += attacker_costs['target_success_msat']
+        attacker_to_target_uncond_msat += attacker_costs['target_unconditional_msat']
 
     attacker_total = attacker_success_msat + attacker_unconditional_msat
     print()
@@ -142,15 +141,18 @@ if __name__ == "__main__":
     projected = get_projected_revenue(network_name, node_id, runtime_ns)
     print(f"Target revenue without attack: {projected} msat")
 
-    # TODO: include unconditional fees here
-    revenue = costs.get_revenue(node_id)
-    honest_revenue = revenue - target_unconditional_msat - target_success_msat
+    success_revenue, unconditional_revenue = costs.get_target_revenue(forwarding_hist_file)
+    target_revenue = success_revenue + unconditional_revenue
+    honest_revenue = target_revenue - attacker_to_target_uncond_msat - attacker_to_target_success_msat
 
-    print(f"Target revenue under attack: {revenue} msat")
-    print(f"- Success Fees: {revenue} msat")
-    print(f"- Unconditional fees: TODO\n")
+    print(f"Target revenue under attack: {target_revenue} msat")
+    print(f"- Success Fees: {success_revenue} msat")
+    print(f"- Unconditional fees: {unconditional_revenue} msat\n")
 
+    attacker_to_target_total = attacker_to_target_success_msat + attacker_to_target_uncond_msat
+    attacker_to_target_percent = round(attacker_to_target_total * 100 / target_revenue, 2)
+    honest_to_target_percent = round(honest_revenue * 100 / target_revenue, 2)
     print("Breakdown of target's revenue under attack:")
-    print(f"- Attacker paid: {target_success_msat + target_unconditional_msat} msat")
-    print(f"- Honest traffic paid: {honest_revenue}\n")
+    print(f"- Attacker paid {attacker_to_target_percent}%: {attacker_to_target_total} msat")
+    print(f"- Honest traffic paid {honest_to_target_percent}%: {honest_revenue} msat\n")
 

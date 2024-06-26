@@ -16,27 +16,24 @@ def run_lncli_command(command):
     
     return json.loads(result.stdout.decode('utf-8'))
 
-def get_revenue(node_id, max_entries=10000):
-    index_offset = 0
-    total_fees = 0
-    while True:
-        response = run_lncli_command(f"warcli lncli {node_id} fwdinghistory --index_offset={index_offset} --max_events={max_entries}")
+def get_target_revenue(forwarding_hist_file):
+    with open(forwarding_hist_file, 'r') as file:
+        data = json.load(file)
+        
+    success_fee_msat = 0
+    unconditional_fee_msat = 0
 
-        if response is None:
-            break
-        
-        forwarding_events = response.get('forwarding_events', [])
-        for fwd in forwarding_events:
-            total_fees += int(fwd.get('fee_msat'))
-        num_forwards_returned = len(forwarding_events)
-        
-        if num_forwards_returned < max_entries:
-            break
-        
-        # Prepare index_offset for the next call
-        index_offset += max_entries
-    
-    return total_fees
+    for forward in data['forwards']:
+        incoming_amount = int(forward['incomingAmount'])
+        outgoing_amount = int(forward['outgoingAmount'])
+        fee_msat = incoming_amount - outgoing_amount
+
+        if forward['settled']:
+            success_fee_msat += fee_msat
+
+        unconditional_fee_msat += fee_msat * 0.01
+
+    return success_fee_msat, unconditional_fee_msat
 
 def paginate_lncli_listpayments(command, max_payments_per_call=10):
     index_offset = 0
