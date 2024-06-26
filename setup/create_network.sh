@@ -59,11 +59,11 @@ if [ -z "$2" ]; then
     echo "Duration argument not provided: not generating historical data for network"
 else
     echo "Duration argument provided: generating historical data"
-	
+
     simfile="$sim_files"/simln.json
     python3 attackathon/setup/lnd_to_simln.py "$json_file" "$simfile"
     cd sim-ln
-	
+
     if [[ -n $(git status --porcelain) ]]; then
         echo "Error: there are unsaved changes in sim-ln, please stash them!"
         exit 1
@@ -80,48 +80,26 @@ else
     git remote remove carla
     git checkout main > /dev/null 2>&1
 
-    # We want to generate two types of data here (TODO: fix seed):
-    # 1. Bootstrapping data for the network, which provides historical reputations
-    # 2. Projected revenue, which provides simulated network traffic without an attack present
-    # Everything before ts_division is (1) and everything after is (2)
-    sim_time=$(( duration + 14 * 24 * 60 * 60 ))
-    ts_division=$(( ($(date +%s) + duration) * 1000000000 ))
+    # First, generate data for the duration specified to bootstrap forwarding history for the nodes.
+    runtime=$((duration / 1000))
+    echo "Generating historical data for $duration seconds, will take: $runtime seconds with speedup of 1000"
+    sim-cli --clock-speedup 1000 -s "$simfile" -t "$duration"
 
-    runtime=$((sim_time / 1000))
-    echo "Generating historical and projected data for $sim_time seconds, will take: $runtime seconds with speedup of 1000"
-    sim-cli --clock-speedup 1000 -s "$simfile" -t "$sim_time"
-
-    # Once data is generated, we'll split it between historical bootstrap and projected revenue.
     input_csv="results/htlc_forwards.csv"
+    mv "$input_csv" "$raw_data"
 
-    # Filenames for output CSVs
-    file_lt_division="historical_data.csv"
-    file_ge_division="projected_forwards.csv"
+    # Next, generate data that we'll use to project the payments that the network would make without an attack 
+    # present. We do this for a fixed 2 week period, because we're unlikely to run our simulation for longer 
+    # than that.
+    # TODO: this data generation must be run with the *same* seed as warnet's sim-ln so that the payments are 
+    # the same.
+	duration=$(( 14 * 24 * 60 * 60))
+    runtime=$((duration / 1000))
+    echo "Generating projected data for $duration seconds, will take: $runtime seconds with speedup of 1000"
+    sim-cli --clock-speedup 1000 -s "$simfile" -t "$duration"
 
-    # Header for the output CSVs
-    header=$(head -n 1 "$input_csv")
+    mv "$input_csv" "$sim_files/projected.csv"
 
-    # Creating new CSV files with headers
-    echo "$header" > "$file_lt_division"
-    echo "$header" > "$file_ge_division"
-
-    # Processing each line in the input CSV, starting from the second line (skipping header)
-    tail -n +2 "$input_csv" | while IFS=',' read -r incoming_amt incoming_expiry incoming_add_ts incoming_remove_ts \
-                                    outgoing_amt outgoing_expiry outgoing_add_ts outgoing_remove_ts \
-                                    forwarding_node forwarding_alias chan_in chan_out; do
-    # Determine which file to write to based on condition
-    if [ "$outgoing_remove_ts" -lt "$ts_division" ]; then
-        echo "$incoming_amt,$incoming_expiry,$incoming_add_ts,$incoming_remove_ts,$outgoing_amt,$outgoing_expiry,$outgoing_add_ts,$outgoing_remove_ts,$forwarding_node,$forwarding_alias,$chan_in,$chan_out" >> "$file_lt_division"
-    else
-        echo "$incoming_amt,$incoming_expiry,$incoming_add_ts,$incoming_remove_ts,$outgoing_amt,$outgoing_expiry,$outgoing_add_ts,$outgoing_remove_ts,$forwarding_node,$forwarding_alias,$chan_in,$chan_out" >> "$file_ge_division"
-    fi
-    done
-
-    # Copy bootstraped data into place for raw data to build circuitbreaker data.
-    mv "$file_lt_division" "$raw_data"
-
-    # Copy remaining data into folder for simulation so that analysis can use projected data for comparisons.
-    mv "$file_ge_division" "$sim_files/projected.csv"
     cd ..
 fi
 
