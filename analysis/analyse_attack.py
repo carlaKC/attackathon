@@ -1,5 +1,6 @@
 import subprocess
 import csv
+import json
 import costs
 import tempfile
 import os
@@ -36,6 +37,23 @@ def save_channel_list(node_id):
         temp_filename = temp_file.name
         execute_command_and_save_output(command, temp_filename)
         return temp_filename
+
+def get_pubkey(node_id):
+    command = f"warcli lncli {node_id} getinfo"
+    
+    try:
+        output = os.popen(command).read().strip()
+        data = json.loads(output)
+        identity_pubkey = data.get("identity_pubkey", None)
+        
+        return identity_pubkey
+
+    except OSError as e:
+        print(f"Error executing command: {e}")
+        return None
+    except json.JSONDecodeError as e:
+        print(f"Error parsing JSON output: {e}")
+        return None
 
 def get_projected_revenue(network_name, node_id, revenue_period_ns):
     file_path = os.path.join("data", network_name, "projected.csv")
@@ -95,25 +113,46 @@ if __name__ == "__main__":
     
     target_jammed.process_files(forwarding_hist_file, channel_list_file, threshold_file)
 
-    results = {}
+    target_pubkey = get_pubkey(node_id)
+
     total_payment_count = 0
-    total_success = 0
-    total_upfront = 0
+    attacker_success_msat = 0
+    attacker_unconditional_msat = 0
+
+    target_total = 0
+    attacker_to_target_success_msat = 0
+    attacker_to_target_uncond_msat = 0
 
     for i, command in enumerate(lncli_commands):
-        results[f'lncli{i}'] = costs.get_attacker_costs(command)
-        total_payment_count += results[f'lncli{i}']['payment_count']
-        total_success += results[f'lncli{i}']['success']
-        total_upfront += results[f'lncli{i}']['upfront']
+        attacker_costs = costs.get_attacker_costs(command, target_pubkey)
+        total_payment_count += attacker_costs['attacker_total']
+        attacker_success_msat += attacker_costs['attacker_success_msat']
+        attacker_unconditional_msat += attacker_costs['attacker_unconditional_msat']
 
-    print(f"Attacker sent: {total_payment_count} payments paying {total_success+total_upfront} msat fees\n")
+        attacker_to_target_success_msat += attacker_costs['target_success_msat']
+        attacker_to_target_uncond_msat += attacker_costs['target_unconditional_msat']
 
-    for key, value in results.items():
-        print(f"{key}: {value}")
-
+    attacker_total = attacker_success_msat + attacker_unconditional_msat
     print()
-    revenue = costs.get_revenue(node_id)
-    print(f"Target revenue under attack: {revenue} msat")
+    print(f"Attacker sent: {total_payment_count} payments paying {attacker_total} msat fees")
+    print(f"- Success fees: {attacker_success_msat} msat")
+    print(f"- Unconditional fees: {attacker_unconditional_msat} msat\n")
 
     projected = get_projected_revenue(network_name, node_id, runtime_ns)
     print(f"Target revenue without attack: {projected} msat")
+
+    success_revenue, unconditional_revenue = costs.get_target_revenue(forwarding_hist_file)
+    target_revenue = success_revenue + unconditional_revenue
+    honest_revenue = target_revenue - attacker_to_target_uncond_msat - attacker_to_target_success_msat
+
+    print(f"Target revenue under attack: {target_revenue} msat")
+    print(f"- Success Fees: {success_revenue} msat")
+    print(f"- Unconditional fees: {unconditional_revenue} msat\n")
+
+    attacker_to_target_total = attacker_to_target_success_msat + attacker_to_target_uncond_msat
+    attacker_to_target_percent = round(attacker_to_target_total * 100 / target_revenue, 2)
+    honest_to_target_percent = round(honest_revenue * 100 / target_revenue, 2)
+    print("Breakdown of target's revenue under attack:")
+    print(f"- Attacker paid {attacker_to_target_percent}%: {attacker_to_target_total} msat")
+    print(f"- Honest traffic paid {honest_to_target_percent}%: {honest_revenue} msat\n")
+

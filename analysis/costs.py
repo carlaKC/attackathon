@@ -16,29 +16,24 @@ def run_lncli_command(command):
     
     return json.loads(result.stdout.decode('utf-8'))
 
-def get_revenue(node_id, max_entries=10):
-    index_offset = 0
-    total_fees = 0
-    
-    while True:
-        response = run_lncli_command(f"warcli lncli {node_id} fwdinghistory --index_offset={index_offset} --max_events={max_entries}")
+def get_target_revenue(forwarding_hist_file):
+    with open(forwarding_hist_file, 'r') as file:
+        data = json.load(file)
+        
+    success_fee_msat = 0
+    unconditional_fee_msat = 0
 
-        if response is None:
-            break
-        
-        forwarding_events = response.get('forwarding_events', [])
-        for fwd in forwarding_events:
-            total_fees += int(fwd.get('fee_msat'))
+    for forward in data['forwards']:
+        incoming_amount = int(forward['incomingAmount'])
+        outgoing_amount = int(forward['outgoingAmount'])
+        fee_msat = incoming_amount - outgoing_amount
 
-        num_forwards_returned = len(forwarding_events)
-        
-        if num_forwards_returned < max_entries:
-            break
-        
-        # Prepare index_offset for the next call
-        index_offset += max_entries
-    
-    return total_fees
+        if forward['settled']:
+            success_fee_msat += fee_msat
+
+        unconditional_fee_msat += fee_msat * 0.01
+
+    return success_fee_msat, unconditional_fee_msat
 
 def paginate_lncli_listpayments(command, max_payments_per_call=10):
     index_offset = 0
@@ -62,45 +57,49 @@ def paginate_lncli_listpayments(command, max_payments_per_call=10):
         # Prepare for the next call
         index_offset = last_index_offset
     
+    return all_payments
+
+def process_attacker_payments(payments, target_pubkey):
+    results = []
+
+    attacker_total = 0
+    attacker_success_msat = 0
+    attacker_unconditional_msat = 0
+
+    target_total = 0
+    target_success_msat = 0
+    target_unconditional_msat = 0
+
+    for payment in payments:
+        attacker_total +=1
+        for htlc in payment["htlcs"]:
+            success = htlc["status"] == "SUCCEEDED"
+            
+            route_fee = int(htlc["route"]["total_fees_msat"])
+            attacker_unconditional_msat += route_fee
+            
+            if success:
+                attacker_success_msat += route_fee
+
+            for hop in htlc["route"]["hops"]:
+                if hop["pub_key"] == target_pubkey:
+                    target_total += 1
+                    hop_fee_msat = int(hop["fee_msat"])
+
+                    target_unconditional_msat += hop_fee_msat
+                    if success:
+                        target_success_msat += hop_fee_msat
+
     return {
-        'payments': all_payments,
+            'attacker_total': attacker_total,
+            'attacker_success_msat': attacker_success_msat,
+            'attacker_unconditional_msat': attacker_unconditional_msat *0.01,
+            'target_total': target_total,
+            'target_success_msat': target_success_msat,
+            'target_unconditional_msat': target_unconditional_msat * 0.01,
     }
 
-def extract_data(payment):
-    data = {}
-    if 'htlcs' in payment:
-        for htlc in payment['htlcs']:
-            status = htlc.get('status')
-            total_fees_msat = htlc.get('route', {}).get('total_fees_msat')
-            if status and total_fees_msat:
-                return pd.Series({
-                    'status': status,
-                    'total_fees_msat': int(total_fees_msat)
-                })
-    return pd.Series({
-        'status': None,
-        'total_fees_msat': 0
-    })
-
-def get_attacker_costs(command, max_payments_per_call=10000):
+def get_attacker_costs(command, target_pubkey, max_payments_per_call=10000):
     result = paginate_lncli_listpayments(command, max_payments_per_call)
-    payment_count = len(result['payments'])
     
-    if payment_count == 0:
-        return {
-           'payment_count': 0,
-            'success': 0,
-            'upfront': 0
-        }
-
-    payments_df = pd.DataFrame(result['payments'])
-    payments_detail_df = payments_df.apply(extract_data, axis=1)
-    
-    success = payments_detail_df[payments_detail_df['status'] == 'SUCCEEDED']['total_fees_msat'].sum()
-    upfront = payments_detail_df['total_fees_msat'].sum() * 0.01
-    
-    return {
-        'payment_count': payment_count,
-        'success': success,
-        'upfront': upfront
-    }
+    return process_attacker_payments(result, target_pubkey)
