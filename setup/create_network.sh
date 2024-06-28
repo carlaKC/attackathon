@@ -81,9 +81,10 @@ else
     git checkout main > /dev/null 2>&1
 
     # First, generate data for the duration specified to bootstrap forwarding history for the nodes.
+    # We fix this seed, but not with the value that we'll be running warnet with (because this is history).
     runtime=$((duration / 1000))
     echo "Generating historical data for $duration seconds, will take: $runtime seconds with speedup of 1000"
-    sim-cli --clock-speedup 1000 -s "$simfile" -t "$duration"
+    sim-cli --clock-speedup 1000 --fix-seed 13995354354227336701 -s "$simfile" -t "$duration"
 
     input_csv="results/htlc_forwards.csv"
     mv "$input_csv" "$raw_data"
@@ -91,12 +92,13 @@ else
     # Next, generate data that we'll use to project the payments that the network would make without an attack 
     # present. We do this for a fixed 2 week period, because we're unlikely to run our simulation for longer 
     # than that.
-    # TODO: this data generation must be run with the *same* seed as warnet's sim-ln so that the payments are 
-    # the same.
-	duration=$(( 14 * 24 * 60 * 60))
+    #
+    # We use the *same* seed that warnet is run with so that we can compare traffic. This is certainly 
+    # imperfect, but this is just an approximation anyway.
+    duration=$(( 14 * 24 * 60 * 60))
     runtime=$((duration / 1000))
     echo "Generating projected data for $duration seconds, will take: $runtime seconds with speedup of 1000"
-    sim-cli --clock-speedup 1000 -s "$simfile" -t "$duration"
+    sim-cli --clock-speedup 1000 --fix-seed 509064695903432291 -s "$simfile" -t "$duration"
 
     mv "$input_csv" "$sim_files/projected.csv"
 
