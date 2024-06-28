@@ -22,6 +22,12 @@ if [ -n "$(git status --porcelain)" ]; then
     exit 1
 fi
 
+# Grab attackathon branch that will run with a fixed seed.
+git remote add carla https://github.com/carlaKC/warnet
+git fetch carla > /dev/null 2>&1 || { echo "Failed to fetch carla/warnet"; exit 1; }
+git checkout carla/attackathon > /dev/null 2>&1 || { echo "Failed to checkout carla/warnet/attackathon"; exit 1; }
+git remote remove carla
+
 # Check whether running docker desktop or minikube.
 docker_info=$(docker info)
 if grep -q "Operating System:.*Desktop" <<< "$docker_info"; then
