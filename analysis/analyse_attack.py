@@ -22,11 +22,11 @@ def execute_command_and_save_output(command, filename):
         subprocess.run(command, stdout=file, shell=True)
 
 def save_forwarding_history(node_id, filename):
-    command = f"kubectl exec -it warnet-tank-ln-{node_id} -c ln-cb -- wget -qO- http://localhost:9235/api/forwarding_history"
+    command = f"kubectl -n warnet exec -it warnet-tank-ln-{node_id} -c ln-cb -- wget -qO- http://localhost:9235/api/forwarding_history"
     execute_command_and_save_output(command, filename)
 
 def save_thresholds(node_id, filename):
-    command = f"kubectl exec -it warnet-tank-ln-{padded_node_id} -c ln-cb -- wget -qO- http://localhost:9235/api/reputation_thresholds"
+    command = f"kubectl -n warnet exec -it warnet-tank-ln-{padded_node_id} -c ln-cb -- wget -qO- http://localhost:9235/api/reputation_thresholds"
     execute_command_and_save_output(command, filename)
 
 def save_channel_list(node_id, filename):
@@ -51,7 +51,7 @@ def get_pubkey(node_id):
         return None
 
 def execute_kubectl_cmd(command, pod):
-    result = subprocess.run(['kubectl', command, 'pod', pod], stdout=subprocess.PIPE)
+    result = subprocess.run(['kubectl', '-n', 'warnet', command, 'pod', pod], stdout=subprocess.PIPE)
     return result.stdout.decode('utf-8')
 
 def simln_start_time():
