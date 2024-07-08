@@ -379,12 +379,12 @@ func getHTLCPrepay(route []*lndclient.Hop, target route.Vertex) (
 	}
 
 	fee := targetIncomingHop.FeeMsat
-	cltvDelta := targetIncomingHop.Expiry - targetOutgoingHop.Expiry
-	periods := (cltvDelta * 5 * 60) / 90 // assume 5 min blocks, 90s period
+	// Note: we're hardcoding cltv cost to 12 in CB to make this value
+	// proportionate to the maximum we'd be expecting based on our revenue
+	// window. This isn't perfect, but helps us scale our values.
+	// cltvDelta := targetIncomingHop.Expiry - targetOutgoingHop.Expiry
+	periods := (12 * 5 * 60) / 90 // assume 5 min blocks, 90s period
 	oc := fee * lnwire.MilliSatoshi(periods)
-
-	log.Printf("opportunity cost: %v for fee: %v with delta: %v over %v "+
-		"periods", oc, fee, cltvDelta, periods)
 
 	return oc, nil
 }
