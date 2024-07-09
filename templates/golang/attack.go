@@ -258,6 +258,118 @@ func slowJamGeneral(ctx context.Context, j *JammingHarness) (
 	return jamChans, nil
 }
 
+type protectedProbeAccessReport struct {
+	dispatchedPmts int
+	targetFailed   int
+	peerFailed     int
+	htlcReceived   int
+}
+
+func buildReputationForProtected(ctx context.Context, j *JammingHarness,
+	route *lndclient.QueryRoutesResponse) error {
+
+	var (
+		protectedHTLCs = 0
+	)
+
+	for {
+		result, err := probeProtectedAccess(ctx, j, route)
+		if err != nil {
+			return err
+		}
+
+                // Probe access to protected slots
+                
+                // If there's no incease in what we've gotten, then we exit
+                // incrementally pay for access to resources 
+	}
+}
+
+// probeProtectedAccess sends a set of probes over the route provided to check
+// how much access we have to protected slots on the targeted channel.
+//
+// This function assumes that the general slots on the target channel have
+// already been jammed so that we can focus on the protected slots.
+func probeProtectedAccess(ctx context.Context, j *JammingHarness,
+	route *lndclient.QueryRoutesResponse) (*protectedProbeAccessReport,
+	error) {
+
+	var (
+		protected   = 483 / 2
+		respChans   []<-chan JammingPaymentResp
+		cancelChans []chan struct{}
+	)
+
+	timeout := time.Tick(time.Minute)
+	var results protectedProbeAccessReport
+
+	for i := 0; i < protected; i++ {
+		cancel := make(chan struct{})
+		cancelChans = append(cancelChans, cancel)
+
+		req0 := JammingPaymentReq{
+			AmtMsat:         route.TotalAmtMsat,
+			SourceIdx:       0,
+			DestIdx:         1,
+			EndorseOutgoing: true,
+			EarlySettle:     cancel,
+			SettleWait:      time.Minute,
+			Settle:          false,
+		}
+
+		resp, err := j.JammingPaymentRoute(ctx, req0, *route)
+		if err != nil {
+			return nil, fmt.Errorf("probe: %v failed: %v", i, err)
+		}
+		respChans = append(respChans, resp)
+
+		results.dispatchedPmts++
+	}
+
+	for i, resp := range respChans {
+		select {
+		// Do *not* risk reputation here, abort everything if we get
+		// near our threshold.
+		case <-timeout:
+			for _, c := range cancelChans {
+				close(c)
+			}
+
+			// Once we've ticked once, replace with another channel
+			// that will never have a result so we don't hit this
+			// branch anymore.
+			timeout = make(<-chan time.Time)
+
+		case r := <-resp:
+			if r.SendFailure == lnrpc.PaymentFailureReason_FAILURE_REASON_NONE {
+				return nil, fmt.Errorf("Probe: %v not failed back", i)
+			}
+
+			if len(r.FailureIdx) == 0 {
+				return nil, fmt.Errorf("Probe: %v has no failed htlcs", i)
+			}
+
+			for _, idx := range r.FailureIdx {
+				switch idx {
+				case 0:
+					return nil, fmt.Errorf("Probe: %v failed at source", i)
+
+				case 1:
+					results.targetFailed++
+
+				case 2:
+					results.peerFailed++
+
+				case 3:
+					results.htlcReceived++
+				}
+			}
+		}
+	}
+
+	return &results, nil
+}
+
 func prepayHTLCs(ctx context.Context, j *JammingHarness,
 	target route.Vertex) error {
 
