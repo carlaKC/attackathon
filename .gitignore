@@ -7,3 +7,5 @@ __pycache__/
 channels.json
 thresholds.json
 forwarding_history.json
+
+data/*/projections/*
