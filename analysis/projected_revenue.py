@@ -39,8 +39,13 @@ def get_projected_revenue(file_path, node_id, revenue_period_ns):
 
 
 def get_revenue_stats(network_name, node_id, revenue_period_ns):
-    projected_values = []
     data_path = os.path.join("data", network_name, "projections")
+    data_path = os.path.join("data", network_name, "projections")
+    if not os.path.exists(data_path):
+        print(f"Projected revenue not generated in {data_path}. Please run `./attackathon/setup/get_projections.sh` {network_name} to generate it.")
+        sys.exit(1)
+
+    projected_values = []
     for filename in os.listdir(data_path):
         projected_data = os.path.join(data_path, filename)
         projected = get_projected_revenue(projected_data, node_id, revenue_period_ns)
