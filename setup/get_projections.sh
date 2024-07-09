@@ -51,12 +51,11 @@ runtime=$((duration / 1000))
 echo "Generating projected data for $duration seconds, will take: $runtime seconds with speedup of 1000"
 
 for i in {1..10}; do
-	echo "Data generation run: $i"
+    echo "Data generation run: $i"
     sim-cli --clock-speedup 1000 --fix-seed 509064695903432291 -s "$simfile" -t "$duration"
 
     input_csv="results/htlc_forwards.csv"
     mv "$input_csv" "$projection_files/$i.csv"
-
 done
 
 cd ..
