@@ -107,8 +107,6 @@ if __name__ == "__main__":
     threshold_file = "thresholds.json"
     save_thresholds(padded_node_id, threshold_file)
     
-    target_jammed.process_files(fwd_file, channel_file, threshold_file)
-
     target_pubkey = get_pubkey(node_id)
 
     total_payment_count = 0
