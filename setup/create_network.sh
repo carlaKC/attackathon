@@ -95,7 +95,7 @@ else
     #
     # We use the *same* seed that warnet is run with so that we can compare traffic. This is certainly 
     # imperfect, but this is just an approximation anyway.
-    duration=$(( 14 * 24 * 60 * 60))
+    duration=$(( 7 * 24 * 60 * 60))
     runtime=$((duration / 1000))
     echo "Generating projected data for $duration seconds, will take: $runtime seconds with speedup of 1000"
     sim-cli --clock-speedup 1000 --fix-seed 509064695903432291 -s "$simfile" -t "$duration"
