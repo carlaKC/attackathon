@@ -66,6 +66,10 @@ type JammingPaymentResp struct {
 	// to cancel payments that could have otherwise succeeded.
 	Htlcs []lndclient.InvoiceHtlc
 
+	// FailureIdx is the set of reported failure indexes for each of the
+	// htlcs sent. Only populated if the payment failed.
+	FailureIdx []uint32
+
 	// Err indicates that an unexpected error occurred.
 	Err error
 }
@@ -247,7 +251,7 @@ func (j *JammingHarness) jammingPayment(ctx context.Context,
 	// to consume both).
 	errChan := make(chan error, 2)
 	invoiceChannel := make(chan []lndclient.InvoiceHtlc, 1)
-	paymentChannel := make(chan lnrpc.PaymentFailureReason, 1)
+	paymentChannel := make(chan lndclient.PaymentStatus, 1)
 
 	j.wg.Add(1)
 	go func() {
@@ -357,7 +361,7 @@ func (j *JammingHarness) jammingPayment(ctx context.Context,
 				if s.State == lnrpc.Payment_FAILED ||
 					s.State == lnrpc.Payment_SUCCEEDED {
 
-					paymentChannel <- s.FailureReason
+					paymentChannel <- s
 
 					return
 				}
@@ -401,7 +405,7 @@ func (j *JammingHarness) jammingPayment(ctx context.Context,
 				htlcs = i
 
 			case p := <-paymentChannel:
-				switch p {
+				switch p.FailureReason {
 				// If the payment succeeded, it must have
 				// reached the receiving node so we include
 				// a report on the HTLCs that we must have
@@ -420,10 +424,23 @@ func (j *JammingHarness) jammingPayment(ctx context.Context,
 				// invoice subscription if the payment never
 				// reached the recipient.
 				default:
-					respChan <- JammingPaymentResp{
-						SendFailure: p,
+					resp := JammingPaymentResp{
+						SendFailure: p.FailureReason,
 						Htlcs:       htlcs,
 					}
+
+					for _, htlc := range p.Htlcs {
+						if htlc.Failure == nil {
+							continue
+						}
+
+						resp.FailureIdx = append(
+							resp.FailureIdx,
+							htlc.Failure.FailureSourceIndex,
+						)
+					}
+
+					respChan <- resp
 					return
 				}
 
