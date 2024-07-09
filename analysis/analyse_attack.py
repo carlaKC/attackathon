@@ -16,30 +16,22 @@ lncli_commands = [
     "kubectl exec -it flagship -n warnet-armada -- lncli --network=regtest --tlscertpath=/credentials/lnd2-tls.cert --macaroonpath=/credentials/lnd2-admin.macaroon --rpcserver=lightning-2.warnet-armada"
 ]
 
-def execute_command_and_save_output(command, output_file):
-    with open(output_file, 'w') as f:
-        subprocess.run(command, stdout=f, shell=True)
+def execute_command_and_save_output(command, filename):
+    file_path = os.path.join(os.getcwd(), filename)
+    with open(file_path, 'w') as file:
+        subprocess.run(command, stdout=file, shell=True)
 
-def save_forwarding_history(node_id):
+def save_forwarding_history(node_id, filename):
     command = f"kubectl exec -it warnet-tank-ln-{node_id} -c ln-cb -- wget -qO- http://localhost:9235/api/forwarding_history"
-    with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_file:
-        temp_filename = temp_file.name
-        execute_command_and_save_output(command, temp_filename)
-        return temp_filename
+    execute_command_and_save_output(command, filename)
 
-def save_thresholds(node_id):
+def save_thresholds(node_id, filename):
     command = f"kubectl exec -it warnet-tank-ln-{padded_node_id} -c ln-cb -- wget -qO- http://localhost:9235/api/reputation_thresholds"
-    with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_file:
-        temp_filename = temp_file.name
-        execute_command_and_save_output(command, temp_filename)
-        return temp_filename
+    execute_command_and_save_output(command, filename)
 
-def save_channel_list(node_id):
+def save_channel_list(node_id, filename):
     command = f"warcli lncli {node_id} listchannels"
-    with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_file:
-        temp_filename = temp_file.name
-        execute_command_and_save_output(command, temp_filename)
-        return temp_filename
+    execute_command_and_save_output(command, filename)
 
 def get_pubkey(node_id):
     command = f"warcli lncli {node_id} getinfo"
@@ -137,11 +129,17 @@ if __name__ == "__main__":
         sys.exit(1)
 
     padded_node_id = node_id.zfill(6)   
-    forwarding_hist_file = save_forwarding_history(padded_node_id)
-    channel_list_file = save_channel_list(padded_node_id)
-    threshold_file = save_thresholds(padded_node_id)
+
+    fwd_file = "forwarding_history.json"
+    save_forwarding_history(padded_node_id, fwd_file)
+
+    channel_file = "channels.json"
+    save_channel_list(padded_node_id, "channels.json")
+
+    threshold_file = "thresholds.json"
+    save_thresholds(padded_node_id, threshold_file)
     
-    target_jammed.process_files(forwarding_hist_file, channel_list_file, threshold_file)
+    target_jammed.process_files(fwd_file, channel_file, threshold_file)
 
     target_pubkey = get_pubkey(node_id)
 
@@ -171,7 +169,7 @@ if __name__ == "__main__":
     projected = get_projected_revenue(network_name, node_id, end_time - start_time)
     print(f"Target revenue without attack: {projected} msat")
 
-    success_revenue, unconditional_revenue = costs.get_target_revenue(forwarding_hist_file, start_time, end_time)
+    success_revenue, unconditional_revenue = costs.get_target_revenue(fwd_file, start_time, end_time)
     target_revenue = success_revenue + unconditional_revenue
     honest_revenue = target_revenue - attacker_to_target_uncond_msat - attacker_to_target_success_msat
 
