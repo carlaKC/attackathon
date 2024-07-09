@@ -575,13 +575,14 @@ func BuildReputation(ctx context.Context, j *JammingHarness) (bool,
 // with *one* channel.
 //
 // Given: Target --- Peer
+// Note: == represents two channels, -- represents one
 //
 // This function will open channels as follows:
 //
 //	   LND0
 //		|
 //
-//	   Target --- Peer --- LND2
+//	   Target --- Peer === LND2
 //
 //		|
 //	    LND1
@@ -615,19 +616,27 @@ func OpenChannels(ctx context.Context, graph *GraphHarness, targetNode,
 
 	log.Printf("Opened channel with target node (%s) from LND-1", targetNode)
 
-	// LND-2 -> Peer
-	chan3, err := graph.OpenChannel(ctx, OpenChannelReq{
+	// LND-2 -> Peer x2
+	req := OpenChannelReq{
 		Source:      2,
 		Dest:        targetPeer,
 		CapacitySat: chanCap,
 		// We still give ourselves some liquidity so that we don't
 		// run into fee spike buffer issues.
 		PushAmt: chanCap / 2,
-	})
+	}
+	chan3, err := graph.OpenChannel(ctx, req)
 	if err != nil {
 		return fmt.Errorf("LND-2 -> target peer: %v", err)
 	}
-	log.Printf("Opened channel with target peer (%s) from LND-2",
+	log.Printf("Opened channel 1 with target peer (%s) from LND-2",
+		targetPeer)
+
+	chan4, err := graph.OpenChannel(ctx, req)
+	if err != nil {
+		return fmt.Errorf("LND-2 -> target peer: %v", err)
+	}
+	log.Printf("Opened channel 2 with target peer (%s) from LND-2",
 		targetPeer)
 
 	// Wait for channels to reflect in graphs.
@@ -640,6 +649,9 @@ func OpenChannels(ctx context.Context, graph *GraphHarness, targetNode,
 
 	graph.WaitForChannel(ctx, 0, 2, chan3)
 	graph.WaitForChannel(ctx, 1, 2, chan3)
+
+	graph.WaitForChannel(ctx, 0, 2, chan4)
+	graph.WaitForChannel(ctx, 1, 2, chan4)
 
 	return nil
 }
