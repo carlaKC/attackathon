@@ -76,5 +76,5 @@ if __name__ == "__main__":
     mean_revenue, std_dev = get_revenue_stats(network_name, node_id, time.time_ns())
 
     print(f"Mean target revenue without attack: {mean_revenue} msat")
-    print(f"Standard deviation of target revenue without attack: {std_dev} msat")
-
+    print(f"- Standard deviation: {std_dev} msat")
+    print(f"- Mean/Std Dev: {mean_revenue/std_dev}")
