@@ -193,6 +193,7 @@ on.
 <details>
  <summary>Setup Instructions</summary>
 
+### Network Setup
 To get started, you will need to clone the following repos *in the same
 working directory*:
 1. [This repo](https://github.com/carlaKC/attackathon)
@@ -227,5 +228,15 @@ provide your students with the following:
 The script currently hardcodes the docker hub account for images to 
 `carlakirkcohen` and tries to push to it, so you'll need to search and 
 replace if you want to test the full flow.
+
+### Projected Revenue
+
+You can also run a script to generate projected payment data for a 
+given network. This may take a while, as it runs the simulator 10 times
+to aggregate expected values over multiple runs (it is not perfectly
+deterministic). This data is not currently checked into the repo to 
+save space.
+
+`./attackathon/setup/get_projections.sh <network name>`
 
 </details>
