@@ -36,15 +36,17 @@ func main() {
 	}
 
 	cleanup := func(force bool) error {
-		log.Println("Cleaning up opened channels for all nodes")
+		log.Println("Cleaning up channels for lnd-0")
 		if err := graph.CloseAllChannels(ctx, 0, force); err != nil {
 			return err
 		}
 
+		log.Println("Cleaning up channels for lnd-1")
 		if err := graph.CloseAllChannels(ctx, 1, force); err != nil {
 			return err
 		}
 
+		log.Println("Cleaning up channels for lnd-2")
 		if err := graph.CloseAllChannels(ctx, 2, force); err != nil {
 			return err
 		}
@@ -54,6 +56,7 @@ func main() {
 
 	// Run cleanup on start to get rid of any lingering channels. Force
 	// close to clean up any old state from an unsuccessful run.
+	log.Println("Cleaning up any attacker channels from previous runs")
 	if err := cleanup(true); err != nil {
 		log.Fatalf("Could not clean up on start: %v", err)
 		os.Exit(1)
