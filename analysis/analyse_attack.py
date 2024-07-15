@@ -152,3 +152,6 @@ if __name__ == "__main__":
     print(f"- Attacker paid {attacker_to_target_percent}%: {attacker_to_target_total} msat")
     print(f"- Honest traffic paid {honest_to_target_percent}%: {honest_revenue} msat\n")
 
+    print("Result CSV:")
+    print("attacker_success_msat,attacker_unconditional_msat,target_success_msat,target_unconditional_msat,attacker_to_target_msat")
+    print(f"{attacker_success_msat},{attacker_unconditional_msat},{success_revenue},{unconditional_revenue},{attacker_to_target_total}")
