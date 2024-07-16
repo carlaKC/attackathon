@@ -411,8 +411,12 @@ func probeProtectedAccess(ctx context.Context, j *JammingHarness,
 			DestIdx:         2,
 			EndorseOutgoing: true,
 			EarlySettle:     cancel,
-			SettleWait:      time.Minute,
-			Settle:          false,
+			// Make this > than our period so that we have to
+			// be good with our cancellation. If we release early
+			// automatically, we'll get a false idea of how many
+			// probes we got through.
+			SettleWait: time.Minute * 5,
+			Settle:     false,
 		}
 
 		resp, err := j.JammingPaymentRoute(ctx, req0, *route)
@@ -422,13 +426,31 @@ func probeProtectedAccess(ctx context.Context, j *JammingHarness,
 		respChans = append(respChans, resp)
 
 		results.dispatchedPmts++
+
+		// Always sanity check timeout to make sure we fail everything
+		// back without a reputation hit.
+		select {
+		case <-timeout:
+			log.Printf("Reached timeout before probed protected: "+
+				"%v send", i)
+
+			break
+
+		default:
+		}
 	}
 
+	// We want all of these probes to be in-flight at the same time so
+	// that we can get an idea of the protected slots available to us.
+	log.Print("Collecting protected probe results (45s).")
 	for i, resp := range respChans {
 		select {
 		// Do *not* risk reputation here, abort everything if we get
 		// near our threshold.
 		case <-timeout:
+			log.Printf("Reached probe timeout processing result: %v "+
+				"canceling all payments", i)
+
 			for _, c := range cancelChans {
 				close(c)
 			}
@@ -440,12 +462,16 @@ func probeProtectedAccess(ctx context.Context, j *JammingHarness,
 
 		case r := <-resp:
 			if r.Err != nil {
-				return nil, fmt.Errorf("Probe: %v failed: %v", i, r.Err)
+				return nil, fmt.Errorf("Probe: %v failed: %v",
+					i, r.Err)
 			}
 
 			if err := results.reportResponse(i, r); err != nil {
 				return nil, err
 			}
+
+		case <-ctx.Done():
+			return nil, ctx.Err()
 		}
 	}
 
