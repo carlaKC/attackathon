@@ -202,7 +202,7 @@ func jamProtected(ctx context.Context, j *JammingHarness,
 	var jamChans []jamPair
 	for i := 0; i < 483/2; i++ {
 		req := JammingPaymentReq{
-			AmtMsat:         route.TotalAmtMsat,
+			AmtMsat:         route.TotalAmtMsat - route.TotalFeesMsat,
 			SourceIdx:       0,
 			DestIdx:         2,
 			EndorseOutgoing: true,
@@ -407,7 +407,7 @@ func probeProtectedAccess(ctx context.Context, j *JammingHarness,
 		cancelChans = append(cancelChans, cancel)
 
 		req0 := JammingPaymentReq{
-			AmtMsat:         route.TotalAmtMsat,
+			AmtMsat:         route.TotalAmtMsat - route.TotalFeesMsat,
 			SourceIdx:       0,
 			DestIdx:         2,
 			EndorseOutgoing: true,
