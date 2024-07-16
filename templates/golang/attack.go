@@ -138,7 +138,9 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 func waitForJams(ctx context.Context, jams []jamPair) (*paymentReport, error) {
 	var (
 		err     error
-		results = &paymentReport{}
+		results = &paymentReport{
+			dispatchedPmts: len(jams),
+		}
 	)
 
 	for i, jam := range jams {
