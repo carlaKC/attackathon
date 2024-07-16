@@ -284,11 +284,48 @@ func slowJamGeneral(ctx context.Context, j *JammingHarness,
 	return jamChans, nil
 }
 
-type protectedProbeAccessReport struct {
+type paymentReport struct {
 	dispatchedPmts int
 	targetFailed   int
 	peerFailed     int
 	htlcReceived   int
+}
+
+func (p *paymentReport) reportResponse(i int, r JammingPaymentResp) error {
+	if r.SendFailure == lnrpc.PaymentFailureReason_FAILURE_REASON_NONE {
+		return fmt.Errorf("Probe: %v not failed back", i)
+	}
+
+	if len(r.FailureIdx) == 0 {
+		return fmt.Errorf("Probe: %v has no failed htlcs", i)
+	}
+
+	for _, idx := range r.FailureIdx {
+		switch idx {
+		case 0:
+			return fmt.Errorf("Probe: %v failed at source", i)
+
+		case 1:
+			p.targetFailed++
+
+		case 2:
+			p.peerFailed++
+
+		case 3:
+			p.htlcReceived++
+
+		default:
+			return fmt.Errorf("unexpected failure index: %v", idx)
+		}
+	}
+
+	return nil
+}
+
+func (p *paymentReport) String() string {
+	return fmt.Sprintf("%v sent, target failed: %v peer failed: %v, "+
+		"reached attacker: %v", p.dispatchedPmts, p.targetFailed,
+		p.peerFailed, p.htlcReceived)
 }
 
 func buildReputationForProtected(ctx context.Context, j *JammingHarness,
@@ -315,10 +352,8 @@ func buildReputationForProtected(ctx context.Context, j *JammingHarness,
 			return err
 		}
 
-		log.Printf("Protected probes: %v sent, target failed: %v "+
-			"peer failed: %v, reached attacker: %v. Total paid "+
-			"for: %v", result.dispatchedPmts, result.targetFailed,
-			result.peerFailed, result.htlcReceived, htlcsPaidFor)
+		log.Printf("Protected probes: %v. Total paid "+
+			"for: %v", result, htlcsPaidFor)
 
 		// We don't want to keep paying for reputation if our htlcs
 		// aren't going to get through due to liquidity constraints.
@@ -360,7 +395,7 @@ func buildReputationForProtected(ctx context.Context, j *JammingHarness,
 // This function assumes that the general slots on the target channel have
 // already been jammed so that we can focus on the protected slots.
 func probeProtectedAccess(ctx context.Context, j *JammingHarness,
-	route *lndclient.QueryRoutesResponse) (*protectedProbeAccessReport,
+	route *lndclient.QueryRoutesResponse) (*paymentReport,
 	error) {
 
 	var (
@@ -370,7 +405,7 @@ func probeProtectedAccess(ctx context.Context, j *JammingHarness,
 	)
 
 	timeout := time.Tick(time.Minute)
-	var results protectedProbeAccessReport
+	var results paymentReport
 
 	for i := 0; i < protected; i++ {
 		cancel := make(chan struct{})
@@ -414,28 +449,8 @@ func probeProtectedAccess(ctx context.Context, j *JammingHarness,
 				return nil, fmt.Errorf("Probe: %v failed: %v", i, r.Err)
 			}
 
-			if r.SendFailure == lnrpc.PaymentFailureReason_FAILURE_REASON_NONE {
-				return nil, fmt.Errorf("Probe: %v not failed back", i)
-			}
-
-			if len(r.FailureIdx) == 0 {
-				return nil, fmt.Errorf("Probe: %v has no failed htlcs", i)
-			}
-
-			for _, idx := range r.FailureIdx {
-				switch idx {
-				case 0:
-					return nil, fmt.Errorf("Probe: %v failed at source", i)
-
-				case 1:
-					results.targetFailed++
-
-				case 2:
-					results.peerFailed++
-
-				case 3:
-					results.htlcReceived++
-				}
+			if err := results.reportResponse(i, r); err != nil {
+				return nil, err
 			}
 		}
 	}
