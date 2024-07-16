@@ -409,8 +409,12 @@ func probeProtectedAccess(ctx context.Context, j *JammingHarness,
 			DestIdx:         1,
 			EndorseOutgoing: true,
 			EarlySettle:     cancel,
-			SettleWait:      time.Minute,
-			Settle:          false,
+			// Make this > than our period so that we have to
+			// be good with our cancellation. If we release early
+			// automatically, we'll get a false idea of how many
+			// probes we got through.
+			SettleWait: time.Minute * 5,
+			Settle:     false,
 		}
 
 		resp, err := j.JammingPaymentRoute(ctx, req0, *route)
@@ -420,6 +424,16 @@ func probeProtectedAccess(ctx context.Context, j *JammingHarness,
 		respChans = append(respChans, resp)
 
 		results.dispatchedPmts++
+
+		select {
+		case <-timeout:
+			log.Printf("Reached timeout before probed protected: "+
+				"%v send", i)
+
+			break
+
+		default:
+		}
 	}
 
 	for i, resp := range respChans {
@@ -427,6 +441,8 @@ func probeProtectedAccess(ctx context.Context, j *JammingHarness,
 		// Do *not* risk reputation here, abort everything if we get
 		// near our threshold.
 		case <-timeout:
+			log.Printf("Timeout reached for protected probes")
+
 			for _, c := range cancelChans {
 				close(c)
 			}
