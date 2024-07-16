@@ -9,6 +9,7 @@ import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/lightninglabs/lndclient"
+	"github.com/lightningnetwork/lnd/lnwire"
 	"github.com/lightningnetwork/lnd/routing/route"
 )
 
@@ -301,4 +302,25 @@ func (c *GraphHarness) LookupByAlias(ctx context.Context, alias string) (
 	}
 
 	return nil, fmt.Errorf("node: %v not found", alias)
+}
+
+// ListChannelIDs lists the short channel ids of the node provided.
+func (c *GraphHarness) ListChannelIDs(ctx context.Context, node int) (
+	[]lnwire.ShortChannelID, error) {
+
+	channels, err := c.LndNodes.GetNode(node).Client.ListChannels(
+		ctx, false, false,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	var scids []lnwire.ShortChannelID
+	for _, channel := range channels {
+		scids = append(
+			scids, lnwire.NewShortChanIDFromInt(channel.ChannelID),
+		)
+	}
+
+	return scids, nil
 }
