@@ -70,13 +70,12 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 		defer wg.Done()
 
 		log.Printf("Waiting for: %v general slow jams", len(chans))
-		n, err := waitForJams(ctx, chans)
+		results, err := waitForJams(ctx, chans)
 		if err != nil {
 			log.Printf("Wait for general jams: %v", err)
 		}
 
-		log.Printf("Of %v general jams, %v reached destination",
-			len(chans), n)
+		log.Printf("General jams: %v", results)
 	}()
 
 	// Get the route we'll use for our protected jamming, using the last
@@ -114,13 +113,12 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 		defer wg.Done()
 
 		log.Printf("Waiting for: %v protected slow jams", len(protectedChans))
-		n, err := waitForJams(ctx, protectedChans)
+		results, err := waitForJams(ctx, protectedChans)
 		if err != nil {
 			log.Printf("Wait for protected jams: %v", err)
 		}
 
-		log.Printf("Of %v protected jams, %v reached destination",
-			len(protectedChans), n)
+		log.Printf("Protected jams: %v", results)
 	}()
 
 	log.Printf("Waiting for slow jams to complete")
@@ -133,17 +131,19 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 // in the order that they were dispatched, as this is the order we'd expect
 // them to resolve if the payment reaches the holding party. It's not critical
 // if some payments are waiting in this queue to be seen as resolved.
-func waitForJams(ctx context.Context, jams []jamPair) (int, error) {
+func waitForJams(ctx context.Context, jams []jamPair) (*paymentReport, error) {
 	var (
-		err         error
-		reachedDest int
+		err     error
+		results = &paymentReport{
+			dispatchedPmts: len(jams),
+		}
 	)
 
-	for _, jam := range jams {
+	for i, jam := range jams {
 		select {
 		case r := <-jam.resp:
-			if len(r.Htlcs) > 0 {
-				reachedDest++
+			if err := results.reportResponse(i, r); err != nil {
+				return nil, err
 			}
 
 		// Even if we error out, we want to cancel all of our payments.
@@ -154,7 +154,7 @@ func waitForJams(ctx context.Context, jams []jamPair) (int, error) {
 		close(jam.req.EarlySettle)
 	}
 
-	return reachedDest, err
+	return results, err
 }
 
 type jamPair struct {
