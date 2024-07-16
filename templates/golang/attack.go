@@ -411,11 +411,10 @@ func probeProtectedAccess(ctx context.Context, j *JammingHarness,
 			DestIdx:         2,
 			EndorseOutgoing: true,
 			EarlySettle:     cancel,
-			// Make this > than our period so that we have to
-			// be good with our cancellation. If we release early
-			// automatically, we'll get a false idea of how many
-			// probes we got through.
-			SettleWait: time.Minute * 5,
+			// Give enough time to dispatch all payments, but
+			// a wide margin to make sure that we don't affect
+			// reputation negatively.
+			SettleWait: time.Second * 30,
 			Settle:     false,
 		}
 
