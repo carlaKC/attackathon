@@ -401,6 +401,7 @@ func probeProtectedAccess(ctx context.Context, j *JammingHarness,
 	timeout := time.Tick(time.Minute)
 	var results paymentReport
 
+	startTime := time.Now()
 	for i := 0; i < protected; i++ {
 		cancel := make(chan struct{})
 		cancelChans = append(cancelChans, cancel)
@@ -439,10 +440,14 @@ func probeProtectedAccess(ctx context.Context, j *JammingHarness,
 		}
 	}
 
+	log.Printf("Dispatched: %v probes in: %v", results.dispatchedPmts,
+		time.Since(startTime))
+
 	// We want all of these probes to be in-flight at the same time so
 	// that we can get an idea of the protected slots available to us.
 	log.Print("Collecting protected probe results (45s).")
 	for i, resp := range respChans {
+		log.Printf("Resolving probe: %v", i)
 		select {
 		// Do *not* risk reputation here, abort everything if we get
 		// near our threshold.
@@ -460,6 +465,7 @@ func probeProtectedAccess(ctx context.Context, j *JammingHarness,
 			timeout = make(<-chan time.Time)
 
 		case r := <-resp:
+			log.Printf("Got result for: %v", i)
 			if r.Err != nil {
 				return nil, fmt.Errorf("Probe: %v failed: %v",
 					i, r.Err)
