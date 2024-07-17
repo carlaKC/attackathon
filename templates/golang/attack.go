@@ -54,7 +54,10 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 	// take two steps:
 	// 1. Slow jam general slots with one of our nodes
 	// 2. Build reputation for access to protected slots with the other
-	chans, err := slowJamGeneral(ctx, jammer, finalSCIDs[0])
+	//
+	// Probing access to the protected slots can take some time, so we set
+	// a longer hold time that we'll run for our full jam.
+	chans, err := slowJamGeneral(ctx, jammer, finalSCIDs[0], time.Minute*20)
 	if err != nil {
 		return fmt.Errorf("slow jamming: %w", err)
 	}
@@ -100,7 +103,7 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 		return fmt.Errorf("Build protected reputation: %w", err)
 	}
 
-	protectedChans, err := jamProtected(ctx, jammer, zeroToTwo)
+	protectedChans, err := jamProtected(ctx, jammer, zeroToTwo, time.Minute*10)
 	if err != nil {
 		return fmt.Errorf("slow jam protected: %w", err)
 	}
@@ -162,11 +165,11 @@ type jamPair struct {
 	resp <-chan JammingPaymentResp
 }
 
-// LND has some saftey limits that it'll release HTLCs early to prevent
-// force closes, take 10 off our final wait to make sure we don't drop
-// the HTLCs.
+// LND has some saftey limits that it'll release HTLCs early to prevent force
+// closes. We compare our target hold time to this limit to make sure we don't
+// drop to chain, returning the minimum.
 func getSlowJamHold(ctx context.Context, route *lndclient.QueryRoutesResponse,
-	j *JammingHarness) (time.Duration, error) {
+	j *JammingHarness, targetHold time.Duration) (time.Duration, error) {
 
 	absHoldHeight := route.Hops[len(route.Hops)-1].Expiry - 10
 	info, err := j.LndNodes.GetNode(0).Client.GetInfo(ctx)
@@ -179,18 +182,18 @@ func getSlowJamHold(ctx context.Context, route *lndclient.QueryRoutesResponse,
 	// Assume 5 minute blocks
 	holdTime := time.Duration(relativeHold) * 5 * time.Minute
 
-	// Our goal is to hold for an hour, so we'll pick the minimum.
-	if holdTime < time.Minute*10 {
+	if holdTime < targetHold {
 		return holdTime, nil
 	}
 
-	return time.Minute * 10, nil
+	return targetHold, nil
 }
 
 func jamProtected(ctx context.Context, j *JammingHarness,
-	route *lndclient.QueryRoutesResponse) ([]jamPair, error) {
+	route *lndclient.QueryRoutesResponse, holdTime time.Duration) (
+	[]jamPair, error) {
 
-	wait, err := getSlowJamHold(ctx, route, j)
+	wait, err := getSlowJamHold(ctx, route, j, holdTime)
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +229,8 @@ func jamProtected(ctx context.Context, j *JammingHarness,
 }
 
 func slowJamGeneral(ctx context.Context, j *JammingHarness,
-	lastChannel lnwire.ShortChannelID) ([]jamPair, error) {
+	lastChannel lnwire.ShortChannelID, holdTime time.Duration) (
+	[]jamPair, error) {
 
 	// Just above the dust limit.
 	jamAmt := lnwire.MilliSatoshi(400_000)
@@ -244,7 +248,7 @@ func slowJamGeneral(ctx context.Context, j *JammingHarness,
 
 	oneToTwo.Hops[len(oneToTwo.Hops)-1].ChannelID = lastChannel.ToUint64()
 
-	wait, err := getSlowJamHold(ctx, oneToTwo, j)
+	wait, err := getSlowJamHold(ctx, oneToTwo, j, holdTime)
 	if err != nil {
 		return nil, err
 	}
