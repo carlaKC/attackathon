@@ -16,7 +16,7 @@ do
   padded_i=$(printf "%06d" $i)
   
   # Execute the kubectl command and save the output to i_reputation_thresholds.json
-  kubectl exec -it warnet-tank-ln-$padded_i -c ln-cb -- wget -qO- http://localhost:9235/api/reputation_thresholds > ${padded_i}_reputation_thresholds.json
+  kubectl -n warnet exec -it warnet-tank-ln-$padded_i -c ln-cb -- wget -qO- http://localhost:9235/api/reputation_thresholds > ${padded_i}_reputation_thresholds.json
 done
 
 echo "Done. Created files from 000000_reputation_thresholds.json to $(printf "%06d" $n)_reputation_thresholds.json"
