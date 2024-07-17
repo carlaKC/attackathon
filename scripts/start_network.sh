@@ -24,7 +24,15 @@ pip install -e .
 echo "💣 Bringing up warnet 💣"
 warcli network start "$sim_files/$network_name.graphml" --force
 
-sleep 10
+check_status() {
+    warcli network status | grep -q "pending"
+}
+
+# Loop until the status does not contain "pending"
+while check_status; do
+    echo "Waiting for network to come up"
+    sleep 5
+done
 
 echo "Waiting for L1 p2p connections"
 while warcli network connected | grep -q "False"; do
