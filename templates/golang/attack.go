@@ -335,8 +335,9 @@ func buildReputationForProtected(ctx context.Context, j *JammingHarness,
 		// In our first round, we'll just pay enough for a few htlcs to
 		// get protected access. We don't want to overpay for htlcs
 		// that won't go through due to liquidity concerns.
-		htlcToPay    = 10
-		htlcsPaidFor = 0
+		htlcToPay       = 10
+		htlcsPaidFor    = 0
+		prevReachedDest = 0
 	)
 
 	for {
@@ -357,19 +358,15 @@ func buildReputationForProtected(ctx context.Context, j *JammingHarness,
 
 		// We don't want to keep paying for reputation if our htlcs
 		// aren't going to get through due to liquidity constraints.
-		// Here we check that our HTLCs have _at least_ made it through
-		// the target link. If they did, we have sufficient reputation
-		// and the target has liquidity. It they did not (assuming our
-		// reputation prepay calculation is correct), then the target
-		// doesn't have liquidity and we can just stop.
-		if result.htlcReceived+result.peerFailed < htlcsPaidFor {
-			log.Printf("Exiting protected probing: %v revceived +"+
-				"%v failed by peer < %v paid for",
-				result.htlcReceived, result.peerFailed,
-				htlcsPaidFor)
-
-			return nil
+		// Check that we're still getting more htlcs through than our
+		// last attempt, and exit if not (the issue is no longer
+		// reputation if paying more doesn't increase our success).
+		if result.htlcReceived <= prevReachedDest {
+			log.Printf("Exiting protected probing: %v received +"+
+				"<= %v on previous attempt",
+				result.htlcReceived, prevReachedDest)
 		}
+		prevReachedDest = result.htlcReceived
 
 		// If any HTLCs failed at the target node, it may be because:
 		// 1. We don't have sufficient reputation
@@ -378,8 +375,8 @@ func buildReputationForProtected(ctx context.Context, j *JammingHarness,
 		// We continue to gradually pay for htlcs to build more
 		// reputation to gain access to htlc slots.
 		htlcToPay = result.targetFailed
-		if htlcToPay > 10 {
-			htlcToPay = 10
+		if htlcToPay > 30 {
+			htlcToPay = 30
 		}
 
 		if htlcToPay == 0 {
