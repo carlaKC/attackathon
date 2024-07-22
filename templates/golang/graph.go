@@ -120,6 +120,8 @@ func (c *GraphHarness) WaitForChannel(ctx context.Context, lookupNode,
 	for i := 0; i < 5; i++ {
 		graphInfo, err := c.LookupNode(ctx, lookupNode, pubkey, true)
 		if err == nil {
+			err = fmt.Errorf("Channel: %v not found",
+				channel.String())
 
 			for _, c := range graphInfo.Channels {
 				if c.ChannelPoint == channel.String() {
