@@ -16,7 +16,7 @@ import (
 
 func runAttack(ctx context.Context, graph *GraphHarness,
 	jammer *JammingHarness, targetNode route.Vertex,
-	targetPeerAlias string) error {
+	targetPeerAlias string, slowJam bool) error {
 
 	node, err := graph.LookupByAlias(ctx, targetPeerAlias)
 	if err != nil {
@@ -103,12 +103,18 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 		return fmt.Errorf("Build protected reputation: %w", err)
 	}
 
-	// Run slow jam on protected slots, note
-	err = slowJamProtected(
-		ctx, jammer, zeroToTwo, time.Minute*10, finalSCIDs[1],
-	)
+	if slowJam {
+		// Run slow jam on protected slots, note
+		err = slowJamProtected(
+			ctx, jammer, zeroToTwo, time.Minute*10, finalSCIDs[1],
+		)
+	} else {
+		err = fastJamProtectedSlots(
+			ctx, jammer, zeroToTwo, time.Minute*10,
+		)
+	}
 	if err != nil {
-		return fmt.Errorf("Slow jam failure: %v", err)
+		return fmt.Errorf("Protected jam failure: %v", err)
 	}
 
 	log.Printf("Waiting for general jams to complete")
