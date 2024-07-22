@@ -133,6 +133,7 @@ require (
 	golang.org/x/exp v0.0.0-20230315142452-642cacee5cc0 // indirect
 	golang.org/x/mod v0.10.0 // indirect
 	golang.org/x/net v0.21.0 // indirect
+	golang.org/x/sync v0.3.0 // indirect
 	golang.org/x/sys v0.17.0 // indirect
 	golang.org/x/term v0.17.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
@@ -162,7 +163,7 @@ require (
 	sigs.k8s.io/yaml v1.2.0 // indirect
 )
 
-replace github.com/lightninglabs/lndclient => github.com/carlakc/lndclient v0.0.0-20240502131641-ff793461c3f4
+replace github.com/lightninglabs/lndclient => github.com/carlakc/lndclient v0.0.0-20240711140526-de2fe7f852cf
 
 // LND has this, so we need it too.
 replace google.golang.org/protobuf => github.com/lightninglabs/protobuf-go-hex-display v1.30.0-hex-display

@@ -12,6 +12,7 @@ import (
 	"github.com/lightningnetwork/lnd/lnrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/invoicesrpc"
 	"github.com/lightningnetwork/lnd/lnrpc/routerrpc"
+	"github.com/lightningnetwork/lnd/lntypes"
 	"github.com/lightningnetwork/lnd/lnwire"
 )
 
@@ -65,6 +66,10 @@ type JammingPaymentResp struct {
 	// to cancel payments that could have otherwise succeeded.
 	Htlcs []lndclient.InvoiceHtlc
 
+	// FailureIdx is the set of reported failure indexes for each of the
+	// htlcs sent. Only populated if the payment failed.
+	FailureIdx []uint32
+
 	// Err indicates that an unexpected error occurred.
 	Err error
 }
@@ -75,6 +80,10 @@ type SendPaymentFunc func(ctx context.Context, inv string) (
 	<-chan lndclient.PaymentStatus, <-chan error, error)
 
 // JammingPaymentRoute performs a jamming payment using the route provided.
+// Note that it may progress the expiry heights in the route to match the
+// current height and invoice generated to allow using of "stale" routes to
+// make payments when blocks are mined between route querying and payment
+// sending.
 func (j *JammingHarness) JammingPaymentRoute(ctx context.Context,
 	req JammingPaymentReq, route lndclient.QueryRoutesResponse) (
 	<-chan JammingPaymentResp, error) {
@@ -88,16 +97,43 @@ func (j *JammingHarness) JammingPaymentRoute(ctx context.Context,
 		<-chan lndclient.PaymentStatus, <-chan error, error) {
 
 		source := j.LndNodes.GetNode(req.SourceIdx)
-
-		b11, err := source.Client.DecodePaymentRequest(ctx, inv)
+		info, err := source.Client.GetInfo(ctx)
 		if err != nil {
 			return nil, nil, err
+		}
+
+		// There are some fields in the payment request that are not
+		// surfaced in the lndclient wrapper, so we manually create a
+		// raw client here.
+		client := lnrpc.NewLightningClient(source.ClientConn)
+		macCtx, err := source.WithMacaroonAuthForService(
+			ctx, lndclient.AdminServiceMac,
+		)
+
+		b11, err := client.DecodePayReq(macCtx, &lnrpc.PayReqString{
+			PayReq: inv,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+
+		// Update the expiry of the pre-selected route to match the
+		// invoice's requirements.
+		var (
+			invExpiry   = info.BlockHeight + uint32(b11.CltvExpiry)
+			routeExpiry = route.Hops[len(route.Hops)-1].Expiry
+
+			heightDiff uint32 = 0
+		)
+
+		if invExpiry > routeExpiry {
+			heightDiff = invExpiry - routeExpiry
 		}
 
 		// Copy everything because we're re-using this route over and
 		// over (hops are common reference, so we just copy everything).
 		pmtRoute := lndclient.QueryRoutesResponse{
-			TotalTimeLock: route.TotalTimeLock,
+			TotalTimeLock: route.TotalTimeLock + heightDiff,
 			TotalFeesMsat: route.TotalFeesMsat,
 			TotalAmtMsat:  route.TotalAmtMsat,
 		}
@@ -106,7 +142,7 @@ func (j *JammingHarness) JammingPaymentRoute(ctx context.Context,
 			pmtRoute.Hops = append(pmtRoute.Hops,
 				&lndclient.Hop{
 					ChannelID:        hop.ChannelID,
-					Expiry:           hop.Expiry,
+					Expiry:           hop.Expiry + heightDiff,
 					AmtToForwardMsat: hop.AmtToForwardMsat,
 					FeeMsat:          hop.FeeMsat,
 					PubKey:           hop.PubKey,
@@ -119,14 +155,19 @@ func (j *JammingHarness) JammingPaymentRoute(ctx context.Context,
 		// Each invoice we pay will have a different MPP record, so
 		// we set it for our set route here.
 		pmtRoute.Hops[len(pmtRoute.Hops)-1].MppRecord = &lnrpc.MPPRecord{
-			PaymentAddr:  b11.PaymentAddress[:],
-			TotalAmtMsat: int64(b11.Value),
+			PaymentAddr:  b11.PaymentAddr,
+			TotalAmtMsat: int64(b11.NumMsat),
+		}
+
+		hash, err := lntypes.MakeHashFromStr(b11.PaymentHash)
+		if err != nil {
+			return nil, nil, err
 		}
 
 		pmtChan, errChan := source.Router.SendToRouteV2(
 			ctx,
 			lndclient.SendToRouteRequest{
-				PaymentHash: b11.Hash,
+				PaymentHash: hash,
 				Route:       pmtRoute,
 				Endorsed:    endorse,
 			},
@@ -210,7 +251,7 @@ func (j *JammingHarness) jammingPayment(ctx context.Context,
 	// to consume both).
 	errChan := make(chan error, 2)
 	invoiceChannel := make(chan []lndclient.InvoiceHtlc, 1)
-	paymentChannel := make(chan lnrpc.PaymentFailureReason, 1)
+	paymentChannel := make(chan lndclient.PaymentStatus, 1)
 
 	j.wg.Add(1)
 	go func() {
@@ -320,7 +361,7 @@ func (j *JammingHarness) jammingPayment(ctx context.Context,
 				if s.State == lnrpc.Payment_FAILED ||
 					s.State == lnrpc.Payment_SUCCEEDED {
 
-					paymentChannel <- s.FailureReason
+					paymentChannel <- s
 
 					return
 				}
@@ -364,7 +405,7 @@ func (j *JammingHarness) jammingPayment(ctx context.Context,
 				htlcs = i
 
 			case p := <-paymentChannel:
-				switch p {
+				switch p.FailureReason {
 				// If the payment succeeded, it must have
 				// reached the receiving node so we include
 				// a report on the HTLCs that we must have
@@ -383,10 +424,23 @@ func (j *JammingHarness) jammingPayment(ctx context.Context,
 				// invoice subscription if the payment never
 				// reached the recipient.
 				default:
-					respChan <- JammingPaymentResp{
-						SendFailure: p,
+					resp := JammingPaymentResp{
+						SendFailure: p.FailureReason,
 						Htlcs:       htlcs,
 					}
+
+					for _, htlc := range p.Htlcs {
+						if htlc.Failure == nil {
+							continue
+						}
+
+						resp.FailureIdx = append(
+							resp.FailureIdx,
+							htlc.Failure.FailureSourceIndex,
+						)
+					}
+
+					respChan <- resp
 					return
 				}
 

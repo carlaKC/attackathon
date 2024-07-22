@@ -9,6 +9,7 @@ import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/lightninglabs/lndclient"
+	"github.com/lightningnetwork/lnd/lnwire"
 	"github.com/lightningnetwork/lnd/routing/route"
 )
 
@@ -29,6 +30,29 @@ type OpenChannelReq struct {
 	Private     bool
 }
 
+func (c *GraphHarness) WaitForSync(ctx context.Context, node int) error {
+	for i := 0; i < 3; i++ {
+		info, err := c.LndNodes.GetNode(node).Client.GetInfo(ctx)
+		if err != nil {
+			return err
+		}
+
+		if info.SyncedToChain && info.SyncedToGraph {
+			return nil
+		}
+
+		select {
+		case <-time.After(time.Second * 5):
+			continue
+
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
+	return fmt.Errorf("Node: %v not synced in time", node)
+}
+
 // OpenChannel is a blocking call that opens a channel from the source node
 // provided to the target:
 // - looks up a node in the graph
@@ -38,6 +62,10 @@ type OpenChannelReq struct {
 // - waits for the channel to be active
 func (c *GraphHarness) OpenChannel(ctx context.Context,
 	req OpenChannelReq) (*wire.OutPoint, error) {
+
+	if err := c.WaitForSync(ctx, req.Source); err != nil {
+		return nil, err
+	}
 
 	connected, err := c.PeerConnected(ctx, req.Source, req.Dest)
 	if err != nil {
@@ -206,7 +234,9 @@ func (c *GraphHarness) PeerConnected(ctx context.Context, source int,
 // CloseAllChannels cooperatively closes all the channels we currently have
 // open and mines blocks to confirm them. Note that it *does not* wait for
 // the channels to reflect as closed in our internal state.
-func (c *GraphHarness) CloseAllChannels(ctx context.Context, node int) error {
+func (c *GraphHarness) CloseAllChannels(ctx context.Context, node int,
+	forceClose bool) error {
+
 	sourceNode := c.LndNodes.GetNode(node)
 	channels, err := sourceNode.Client.ListChannels(ctx, false, false)
 	if err != nil {
@@ -218,7 +248,7 @@ func (c *GraphHarness) CloseAllChannels(ctx context.Context, node int) error {
 	for _, channel := range channels {
 		closeChan, errChan, err := sourceNode.Client.CloseChannel(
 			ctx, outpointFromString(channel.ChannelPoint),
-			true, 0, nil,
+			forceClose, 0, nil,
 		)
 		if err != nil {
 			return err
@@ -254,4 +284,43 @@ func (c *GraphHarness) CloseAllChannels(ctx context.Context, node int) error {
 
 	return nil
 
+}
+
+// LookupByAlias looks up a node by its alias in the graph
+func (c *GraphHarness) LookupByAlias(ctx context.Context, alias string) (
+	*lndclient.Node, error) {
+
+	graph, err := c.LndNodes.GetNode(1).Client.DescribeGraph(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, node := range graph.Nodes {
+		if alias == node.Alias {
+			return &node, nil
+		}
+	}
+
+	return nil, fmt.Errorf("node: %v not found", alias)
+}
+
+// ListChannelIDs lists the short channel ids of the node provided.
+func (c *GraphHarness) ListChannelIDs(ctx context.Context, node int) (
+	[]lnwire.ShortChannelID, error) {
+
+	channels, err := c.LndNodes.GetNode(node).Client.ListChannels(
+		ctx, false, false,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	var scids []lnwire.ShortChannelID
+	for _, channel := range channels {
+		scids = append(
+			scids, lnwire.NewShortChanIDFromInt(channel.ChannelID),
+		)
+	}
+
+	return scids, nil
 }
