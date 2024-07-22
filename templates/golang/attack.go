@@ -591,14 +591,12 @@ func getHTLCPrepay(route []*lndclient.Hop, target route.Vertex) (
 	// Note: we're hardcoding cltv cost to 1 in CB to make this value
 	// proportionate to the maximum we'd be expecting based on our revenue
 	// window. This isn't perfect, but helps us scale our values.
-	// cltvDelta := targetIncomingHop.Expiry - targetOutgoingHop.Expiry
-	periods := (1 * 5 * 60) / 90 // assume 5 min blocks, 90s period
-	oc := fee * lnwire.MilliSatoshi(periods)
+	oc := float64(fee) * (1 * 5 * 60) / 90 // assume 5 min blocks, 90s period
 
-	log.Printf("opportunity cost: %v for fee: %v with delta: %v over %v "+
-		"periods", oc, fee, cltvDelta, periods)
+	log.Printf("opportunity cost: %v for fee: %v with delta: %v", oc, fee,
+		cltvDelta)
 
-	return oc, nil
+	return lnwire.MilliSatoshi(oc), nil
 }
 
 // BuildReputation sends payments between LND0 and LND1, proving to determine
