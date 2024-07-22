@@ -103,29 +103,41 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 		return fmt.Errorf("Build protected reputation: %w", err)
 	}
 
-	protectedChans, err := jamProtected(ctx, jammer, zeroToTwo, time.Minute*10)
+	// Run slow jam on protected slots, note
+	err = slowJamProtected(
+		ctx, jammer, zeroToTwo, time.Minute*10, finalSCIDs[1],
+	)
+	if err != nil {
+		return fmt.Errorf("Slow jam failure: %v", err)
+	}
+
+	log.Printf("Waiting for general jams to complete")
+	wg.Wait()
+
+	return nil
+}
+
+// Dispatches slow jamming attack against protected slots, blocking until the
+// payments have completed (after the duration provided).
+func slowJamProtected(ctx context.Context, jammer *JammingHarness,
+	route *lndclient.QueryRoutesResponse, duration time.Duration,
+	lastChannel lnwire.ShortChannelID) error {
+
+	protectedChans, err := jamProtected(ctx, jammer, route, duration)
 	if err != nil {
 		return fmt.Errorf("slow jam protected: %w", err)
 	}
 
-	log.Printf("Dispatched: %v protected slow jams over: %v", len(chans),
-		finalSCIDs[1].ToUint64())
+	log.Printf("Dispatched: %v protected slow jams over: %v",
+		len(protectedChans), lastChannel.ToUint64())
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	log.Printf("Waiting for: %v protected slow jams", len(protectedChans))
+	results, err := waitForJams(ctx, protectedChans)
+	if err != nil {
+		log.Printf("Wait for protected jams: %v", err)
+	}
 
-		log.Printf("Waiting for: %v protected slow jams", len(protectedChans))
-		results, err := waitForJams(ctx, protectedChans)
-		if err != nil {
-			log.Printf("Wait for protected jams: %v", err)
-		}
-
-		log.Printf("Protected jams: %v", results)
-	}()
-
-	log.Printf("Waiting for slow jams to complete")
-	wg.Wait()
+	log.Printf("Protected jams: %v", results)
 
 	return nil
 }
