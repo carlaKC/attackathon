@@ -18,12 +18,12 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 	jammer *JammingHarness, targetNode route.Vertex,
 	targetPeerAlias string, slowJam bool) error {
 
-	node, err := graph.LookupByAlias(ctx, targetPeerAlias)
+	peerNode, err := graph.LookupByAlias(ctx, targetPeerAlias)
 	if err != nil {
 		return err
 	}
 
-	err = OpenChannels(ctx, graph, targetNode, node.PubKey)
+	err = OpenChannels(ctx, graph, targetNode, peerNode.PubKey)
 	if err != nil {
 		return err
 	}
