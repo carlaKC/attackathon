@@ -55,9 +55,12 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 	// 1. Slow jam general slots with one of our nodes
 	// 2. Build reputation for access to protected slots with the other
 	//
-	// Probing access to the protected slots can take some time, so we set
-	// a longer hold time that we'll run for our full jam.
-	chans, err := slowJamGeneral(ctx, jammer, finalSCIDs[0], time.Minute*20)
+        // We can set a very long hold time on our slow jam because we'll clean
+        // it up once we've finished with jamming the protected slots.
+	cancelSlowJam := make(chan struct{})
+	chans, err := slowJamGeneral(
+		ctx, jammer, finalSCIDs[0], time.Hour, cancelSlowJam,
+	)
 	if err != nil {
 		return fmt.Errorf("slow jamming: %w", err)
 	}
@@ -117,6 +120,7 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 		return fmt.Errorf("Protected jam failure: %v", err)
 	}
 
+	close(cancelSlowJam)
 	log.Printf("Waiting for general jams to complete")
 	wg.Wait()
 
@@ -324,8 +328,6 @@ func waitForJams(ctx context.Context, jams []jamPair) (*paymentReport, error) {
 		case <-ctx.Done():
 			err = ctx.Err()
 		}
-
-		close(jam.req.EarlySettle)
 	}
 
 	return results, err
@@ -400,7 +402,8 @@ func jamProtected(ctx context.Context, j *JammingHarness,
 }
 
 func slowJamGeneral(ctx context.Context, j *JammingHarness,
-	lastChannel lnwire.ShortChannelID, holdTime time.Duration) (
+	lastChannel lnwire.ShortChannelID, holdTime time.Duration,
+	cancel chan struct{}) (
 	[]jamPair, error) {
 
 	// Just above the dust limit.
@@ -434,7 +437,7 @@ func slowJamGeneral(ctx context.Context, j *JammingHarness,
 			EndorseOutgoing: false,
 			SettleWait:      wait,
 			Settle:          false,
-			EarlySettle:     make(chan struct{}),
+			EarlySettle:     cancel,
 		}
 
 		if i%50 == 0 && i != 0 {
