@@ -18,12 +18,12 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 	jammer *JammingHarness, targetNode route.Vertex,
 	targetPeerAlias string, slowJam bool) error {
 
-	peerNode, err := graph.LookupByAlias(ctx, targetPeerAlias)
+	info, err := graph.GetTargetsInfo(ctx, targetPeerAlias, targetNode)
 	if err != nil {
 		return err
 	}
 
-	err = OpenChannels(ctx, graph, targetNode, peerNode.PubKey)
+	err = OpenChannels(ctx, graph, info)
 	if err != nil {
 		return err
 	}
@@ -55,8 +55,8 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 	// 1. Slow jam general slots with one of our nodes
 	// 2. Build reputation for access to protected slots with the other
 	//
-        // We can set a very long hold time on our slow jam because we'll clean
-        // it up once we've finished with jamming the protected slots.
+	// We can set a very long hold time on our slow jam because we'll clean
+	// it up once we've finished with jamming the protected slots.
 	cancelSlowJam := make(chan struct{})
 	chans, err := slowJamGeneral(
 		ctx, jammer, finalSCIDs[0], time.Hour, cancelSlowJam,
@@ -967,14 +967,14 @@ func BuildReputation(ctx context.Context, j *JammingHarness) (bool,
 //
 //		|
 //	    LND1
-func OpenChannels(ctx context.Context, graph *GraphHarness, targetNode,
-	targetPeer route.Vertex) error {
+func OpenChannels(ctx context.Context, graph *GraphHarness,
+	info *TargetsInfo) error {
 
 	// LND0 -> Target
 	chanCap := funding.MaxBtcFundingAmount
 	chan1, err := graph.OpenChannel(ctx, OpenChannelReq{
 		Source:      0,
-		Dest:        targetNode,
+		Dest:        info.Target,
 		CapacitySat: chanCap,
 		PushAmt:     chanCap / 2,
 	})
@@ -982,12 +982,12 @@ func OpenChannels(ctx context.Context, graph *GraphHarness, targetNode,
 		return fmt.Errorf("LND-0 -> target: %v", err)
 	}
 
-	log.Printf("Opened channel with target node (%s) from LND-0", targetNode)
+	log.Printf("Opened channel with target node (%s) from LND-0", info.Target)
 
 	// LND-1 -> Target
 	chan2, err := graph.OpenChannel(ctx, OpenChannelReq{
 		Source:      1,
-		Dest:        targetNode,
+		Dest:        info.Target,
 		CapacitySat: chanCap,
 		PushAmt:     chanCap / 2,
 	})
@@ -995,12 +995,12 @@ func OpenChannels(ctx context.Context, graph *GraphHarness, targetNode,
 		return fmt.Errorf("LND-1 -> target: %v", err)
 	}
 
-	log.Printf("Opened channel with target node (%s) from LND-1", targetNode)
+	log.Printf("Opened channel with target node (%s) from LND-1", info.Target)
 
 	// LND-2 -> Peer x2
 	req := OpenChannelReq{
 		Source:      2,
-		Dest:        targetPeer,
+		Dest:        info.Peer,
 		CapacitySat: chanCap,
 		// We still give ourselves some liquidity so that we don't
 		// run into fee spike buffer issues.
@@ -1011,14 +1011,14 @@ func OpenChannels(ctx context.Context, graph *GraphHarness, targetNode,
 		return fmt.Errorf("LND-2 -> target peer: %v", err)
 	}
 	log.Printf("Opened channel 1 with target peer (%s) from LND-2",
-		targetPeer)
+		info.Peer)
 
 	chan4, err := graph.OpenChannel(ctx, req)
 	if err != nil {
 		return fmt.Errorf("LND-2 -> target peer: %v", err)
 	}
 	log.Printf("Opened channel 2 with target peer (%s) from LND-2",
-		targetPeer)
+		info.Peer)
 
 	// Wait for channels to reflect in graphs.
 	fmt.Println("Waiting for channels to reflect in graphs")
