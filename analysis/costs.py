@@ -105,7 +105,11 @@ def process_attacker_payments(payments, target_pubkey):
             'target_unconditional_msat': target_unconditional_msat * 0.01,
     }
 
-def get_attacker_costs(command, target_pubkey, max_payments_per_call=10000):
+def get_attacker_costs(file_name, command, target_pubkey, max_payments_per_call=10000):
     result = paginate_lncli_listpayments(command, max_payments_per_call)
-    
+   
+    # Write to json file so that we can re-run if necessary.
+    with open(file_name, 'w') as f:
+        json.dump({"payments": result}, f, indent=4)
+
     return process_attacker_payments(result, target_pubkey)
