@@ -118,7 +118,7 @@ if __name__ == "__main__":
     attacker_to_target_uncond_msat = 0
 
     for i, command in enumerate(lncli_commands):
-        attacker_costs = costs.get_attacker_costs(command, target_pubkey)
+        attacker_costs = costs.get_attacker_costs('lnd_'+str(i)+'.json', command, target_pubkey)
         total_payment_count += attacker_costs['attacker_total']
         attacker_success_msat += attacker_costs['attacker_success_msat']
         attacker_unconditional_msat += attacker_costs['attacker_unconditional_msat']
@@ -150,6 +150,9 @@ if __name__ == "__main__":
     print(f"- Attacker paid {attacker_to_target_percent}%: {attacker_to_target_total} msat")
     print(f"- Honest traffic paid {honest_to_target_percent}%: {honest_revenue} msat\n")
 
+    jam_time = target_jammed.get_jam_time(fwd_file, 440)
+    print(f"Total amount jammed > 440 slots: {jam_time} minutes")
+
     print("Result CSV:")
-    print("attacker_success_msat,attacker_unconditional_msat,target_success_msat,target_unconditional_msat,attacker_to_target_msat")
-    print(f"{attacker_success_msat},{attacker_unconditional_msat},{success_revenue},{unconditional_revenue},{attacker_to_target_total}")
+    print("attacker_success_msat,attacker_unconditional_msat,target_success_msat,target_unconditional_msat,attacker_to_target_msat,jam_time_min")
+    print(f"{attacker_success_msat},{attacker_unconditional_msat},{success_revenue},{unconditional_revenue},{attacker_to_target_total},{jam_time}")
