@@ -111,6 +111,7 @@ spec:
     - --externalhosts=lightning-0.warnet-armada
     - --tlsextradomain=lightning-0.warnet-armada
     - --trickledelay=1
+    - --protocol.wumbo-channels
     - ""
     env:
     - name: LN_IMPL
@@ -181,6 +182,7 @@ spec:
     - --externalhosts=lightning-1.warnet-armada
     - --tlsextradomain=lightning-1.warnet-armada
     - --trickledelay=1
+    - --protocol.wumbo-channels
     - ""
     env:
     - name: LN_IMPL
@@ -251,6 +253,7 @@ spec:
     - --externalhosts=lightning-2.warnet-armada
     - --tlsextradomain=lightning-2.warnet-armada
     - --trickledelay=1
+    - --protocol.wumbo-channels
     - ""
     env:
     - name: LN_IMPL
