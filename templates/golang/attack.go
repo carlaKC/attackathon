@@ -167,6 +167,22 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 			err)
 	}
 
+	channels, err := jammer.LndNodes.GetNode(0).Client.ListChannels(
+		ctx, false, false,
+	)
+	if err != nil {
+		return fmt.Errorf("Get attacking node 0 channels: %v", err)
+	}
+	if len(channels) != 1 {
+		return fmt.Errorf("Expected one channel for node 0, got: %v",
+			len(channels))
+	}
+
+	log.Printf("Building reputation for channel: %v. Outgoing balance: %v "+
+		"total sending: %v", channels[0].ChannelID,
+		lnwire.NewMSatFromSatoshis(channels[0].LocalBalance),
+		route.TotalAmtMsat*lnwire.MilliSatoshi(count))
+
 	route.Hops[len(route.Hops)-1].ChannelID = finalSCIDs[1].ToUint64()
 
 	log.Print("Paying for reputation to access protected slots")
