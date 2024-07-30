@@ -37,7 +37,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	log.Printf("Starting attack against: %v", target)
+	log.Printf("Starting attack against: %v - %v", target, strategy)
 	// Write your attack here!
 	//
 	// We've provided two utilities for you:
