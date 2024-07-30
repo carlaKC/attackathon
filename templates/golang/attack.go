@@ -695,6 +695,8 @@ func buildReputationForProtected(ctx context.Context, j *JammingHarness,
 			log.Printf("Exiting protected probing: %v received +"+
 				"<= %v on previous attempt",
 				result.htlcReceived, prevReachedDest)
+
+			return nil
 		}
 		prevReachedDest = result.htlcReceived
 
