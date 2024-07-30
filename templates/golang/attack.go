@@ -522,7 +522,9 @@ func buildReputationForProtected(ctx context.Context, j *JammingHarness,
 
 		htlcsPaidFor += htlcToPay
 
-		result, err := probeProtectedAccess(ctx, j, route)
+                // For slot probing, we'll always send enough HTLCs to fill 
+                // all of our slots.
+		result, err := probeProtectedAccess(ctx, j, route, 483/2)
 		if err != nil {
 			return err
 		}
@@ -566,11 +568,10 @@ func buildReputationForProtected(ctx context.Context, j *JammingHarness,
 // This function assumes that the general slots on the target channel have
 // already been jammed so that we can focus on the protected slots.
 func probeProtectedAccess(ctx context.Context, j *JammingHarness,
-	route *lndclient.QueryRoutesResponse) (*paymentReport,
+	route *lndclient.QueryRoutesResponse, count int) (*paymentReport,
 	error) {
 
 	var (
-		protected   = 483 / 2
 		respChans   []<-chan JammingPaymentResp
 		cancelChans []chan struct{}
 	)
@@ -579,7 +580,7 @@ func probeProtectedAccess(ctx context.Context, j *JammingHarness,
 	var results paymentReport
 
 	startTime := time.Now()
-	for i := 0; i < protected; i++ {
+	for i := 0; i < count; i++ {
 		cancel := make(chan struct{})
 		cancelChans = append(cancelChans, cancel)
 
