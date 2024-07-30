@@ -324,3 +324,48 @@ func (c *GraphHarness) ListChannelIDs(ctx context.Context, node int) (
 
 	return scids, nil
 }
+
+type TargetsInfo struct {
+	Peer          route.Vertex
+	Target        route.Vertex
+	TargetChannel lndclient.ChannelEdge
+}
+
+// GetTargetsInfo looks up the peer with our target that we're attacking and
+// the channel between them.
+func (c *GraphHarness) GetTargetsInfo(ctx context.Context,
+	targetPeerAlias string, targetNode route.Vertex) (*TargetsInfo, error) {
+
+	peerNode, err := c.LookupByAlias(ctx, targetPeerAlias)
+	if err != nil {
+		return nil, err
+	}
+
+	targetNodeInfo, err := c.LookupNode(ctx, 0, targetNode, true)
+	if err != nil {
+		return nil, err
+	}
+
+	info := &TargetsInfo{
+		Target: targetNode,
+		Peer:   peerNode.PubKey,
+	}
+	for _, c := range targetNodeInfo.Channels {
+		switch c.Node1 {
+		case targetNode:
+			if c.Node2 == peerNode.PubKey {
+				info.TargetChannel = c
+				return info, nil
+			}
+
+		case peerNode.PubKey:
+			if c.Node2 == targetNode {
+				info.TargetChannel = c
+				return info, nil
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("could not find channel between: %v and %v(%v)",
+		targetNode, peerNode.PubKey, targetPeerAlias)
+}

