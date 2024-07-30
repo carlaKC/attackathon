@@ -331,6 +331,20 @@ type TargetsInfo struct {
 	TargetChannel lndclient.ChannelEdge
 }
 
+// TargetToPeerPolicy returns the channel policy that the target node has set
+// for payments going to their peer over the target channel.
+func (t *TargetsInfo) TargetToPeerPolicy() *lndclient.RoutingPolicy {
+	if t.TargetChannel.Node1 == t.Target {
+		return t.TargetChannel.Node1Policy
+	}
+
+	if t.TargetChannel.Node2 == t.Target {
+		return t.TargetChannel.Node2Policy
+	}
+
+	panic("target node not found in channel policy")
+}
+
 // GetTargetsInfo looks up the peer with our target that we're attacking and
 // the channel between them.
 func (c *GraphHarness) GetTargetsInfo(ctx context.Context,
