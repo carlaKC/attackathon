@@ -22,6 +22,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	peer := os.Getenv("PEER")
+	if peer == "" {
+		log.Fatalf("Need peer alias to attack")
+		os.Exit(1)
+	}
+
+	speed := os.Getenv("SPEED")
+	resource := os.Getenv("RESOURCES")
+
+	strategy, err := newAttackStrategy(speed, resource)
+	if err != nil {
+		log.Fatalf("Invalid attack strategy: %v", err)
+		os.Exit(1)
+	}
+
 	log.Printf("Starting attack against: %v", target)
 	// Write your attack here!
 	//
@@ -75,7 +90,8 @@ func main() {
 	}()
 
 	// Temporarily fixing to a single target peer.
-	if err := runAttack(ctx, graph, jammer, target, "6", false); err != nil {
+	err = runAttack(ctx, graph, jammer, target, peer, strategy)
+	if err != nil {
 		log.Fatalf("Attack error: %v", err)
 	}
 }
