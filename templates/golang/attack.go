@@ -23,6 +23,38 @@ const (
 	attackStrategyFastJamLiquidty
 )
 
+func newAttackStrategy(speed string, resources string) (attackStrategy, error) {
+	var isSlowjam bool
+	switch speed {
+	case "FAST":
+
+	case "SLOW":
+		isSlowjam = true
+
+	default:
+		return 0, fmt.Errorf("invalid speed: %v", speed)
+	}
+
+	switch resources {
+	case "SLOTS":
+		if isSlowjam {
+			return attackStrategySlowJamSlots, nil
+		}
+
+		return attackStrategyFastJamSlots, nil
+
+	case "LIQUIDITY":
+		if isSlowjam {
+			return attackStrategySlowJamLiqudity, nil
+		}
+
+		return attackStrategyFastJamLiquidty, nil
+
+	default:
+		return 0, fmt.Errorf("invalid resources: %v", resources)
+	}
+}
+
 // isSlowJam returns a boolean if the attack strategy slowjams protected
 // resources.
 func (a attackStrategy) isSlowJam() bool {
