@@ -101,7 +101,7 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 	zeroToTwo.Hops[len(zeroToTwo.Hops)-1].ChannelID = finalSCIDs[1].ToUint64()
 
 	log.Print("Paying for reputation to access protected slots")
-	err = buildReputationForProtected(ctx, jammer, zeroToTwo, targetNode)
+	err = buildReputationForProtected(ctx, jammer, zeroToTwo, targetNode, 483/2)
 	if err != nil {
 		return fmt.Errorf("Build protected reputation: %w", err)
 	}
@@ -503,16 +503,20 @@ func (p *paymentReport) String() string {
 }
 
 func buildReputationForProtected(ctx context.Context, j *JammingHarness,
-	route *lndclient.QueryRoutesResponse, target route.Vertex) error {
+	route *lndclient.QueryRoutesResponse, target route.Vertex,
+	htlcCount int) error {
 
 	var (
-		// In our first round, we'll just pay enough for a few htlcs to
-		// get protected access. We don't want to overpay for htlcs
-		// that won't go through due to liquidity concerns.
-		htlcToPay       = 10
+		// Aim to pay for 10% of our total count of HLTCs each round.
+		htlcToPay       = htlcCount / 10
 		htlcsPaidFor    = 0
 		prevReachedDest = 0
 	)
+
+	// Check that we don't have a value so small that we round to 0.
+	if htlcToPay == 0 {
+		return fmt.Errorf("Expected at least 10 htlcs, got: %v", htlcCount)
+	}
 
 	for {
 		err := prepayHTLCs(ctx, j, htlcToPay, route, target)
@@ -522,9 +526,9 @@ func buildReputationForProtected(ctx context.Context, j *JammingHarness,
 
 		htlcsPaidFor += htlcToPay
 
-                // For slot probing, we'll always send enough HTLCs to fill 
-                // all of our slots.
-		result, err := probeProtectedAccess(ctx, j, route, 483/2)
+		// For slot probing, we'll always send enough HTLCs to fill
+		// all of our slots.
+		result, err := probeProtectedAccess(ctx, j, route, htlcCount)
 		if err != nil {
 			return err
 		}
@@ -551,8 +555,8 @@ func buildReputationForProtected(ctx context.Context, j *JammingHarness,
 		// We continue to gradually pay for htlcs to build more
 		// reputation to gain access to htlc slots.
 		htlcToPay = result.targetFailed
-		if htlcToPay > 30 {
-			htlcToPay = 30
+		if htlcToPay > htlcCount/10 {
+			htlcToPay = htlcCount / 10
 		}
 
 		if htlcToPay == 0 {
