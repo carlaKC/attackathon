@@ -593,6 +593,7 @@ func slowJamGeneral(ctx context.Context, j *JammingHarness,
 
 type paymentReport struct {
 	dispatchedPmts int
+	sourceFailed   int
 	targetFailed   int
 	peerFailed     int
 	htlcReceived   int
@@ -610,7 +611,7 @@ func (p *paymentReport) reportResponse(i int, r JammingPaymentResp) error {
 	for _, idx := range r.FailureIdx {
 		switch idx {
 		case 0:
-			return fmt.Errorf("Probe: %v failed at source", i)
+			p.sourceFailed++
 
 		case 1:
 			p.targetFailed++
@@ -630,9 +631,9 @@ func (p *paymentReport) reportResponse(i int, r JammingPaymentResp) error {
 }
 
 func (p *paymentReport) String() string {
-	return fmt.Sprintf("%v sent, target failed: %v peer failed: %v, "+
-		"reached attacker: %v", p.dispatchedPmts, p.targetFailed,
-		p.peerFailed, p.htlcReceived)
+	return fmt.Sprintf("%v sent, source failed: %v target failed: %v "+
+		"peer failed: %v, reached attacker: %v", p.dispatchedPmts,
+		p.sourceFailed, p.targetFailed, p.peerFailed, p.htlcReceived)
 }
 
 func buildReputationForProtected(ctx context.Context, j *JammingHarness,
@@ -834,6 +835,9 @@ func prepayHTLCs(ctx context.Context, j *JammingHarness, n int,
 		Settle:          true,
 	}
 
+	log.Printf("Prepaying: %v fee on amount %v (original fee: %v)",
+		totalPayable, route.TotalAmtMsat, route.TotalFeesMsat)
+
 	// TODO: we shouldn't allow overpayment to contribute to reputation,
 	// but for now we can save ourselves the hassle of multiple payments.
 	for _, hop := range route.Hops {
@@ -843,9 +847,6 @@ func prepayHTLCs(ctx context.Context, j *JammingHarness, n int,
 	}
 	route.TotalFeesMsat += totalPayable
 	route.TotalAmtMsat += totalPayable
-
-	log.Printf("Prepaying: %v fee on amount %v with %v per payment", totalPayable,
-		route.TotalAmtMsat, route.TotalFeesMsat)
 
 	resp0, err := j.JammingPaymentRoute(ctx, req0, *route)
 	if err != nil {
@@ -898,15 +899,14 @@ func getHTLCPrepay(route []*lndclient.Hop, target route.Vertex) (
 	}
 
 	fee := targetIncomingHop.FeeMsat
-	cltvDelta := targetIncomingHop.Expiry - targetOutgoingHop.Expiry
 
 	// Note: we're hardcoding cltv cost to 1 in CB to make this value
 	// proportionate to the maximum we'd be expecting based on our revenue
 	// window. This isn't perfect, but helps us scale our values.
 	oc := float64(fee) * (1 * 5 * 60) / 90 // assume 5 min blocks, 90s period
 
-	log.Printf("opportunity cost: %v for fee: %v with delta: %v", oc, fee,
-		cltvDelta)
+	log.Printf("Opportunity cost: %v for fee: %v",
+		lnwire.MilliSatoshi(oc), fee)
 
 	return lnwire.MilliSatoshi(oc), nil
 }
