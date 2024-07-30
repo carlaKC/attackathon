@@ -55,6 +55,25 @@ func newAttackStrategy(speed string, resources string) (attackStrategy, error) {
 	}
 }
 
+func (a attackStrategy) String() string {
+	switch a {
+	case attackStrategySlowJamSlots:
+		return "slow/slots"
+
+	case attackStrategyFastJamSlots:
+		return "fast/slots"
+
+	case attackStrategyFastJamLiquidty:
+		return "fast/liquidity"
+
+	case attackStrategySlowJamLiqudity:
+		return "slow/liquidity"
+
+	default:
+		return "unknown"
+	}
+}
+
 // isSlowJam returns a boolean if the attack strategy slowjams protected
 // resources.
 func (a attackStrategy) isSlowJam() bool {
