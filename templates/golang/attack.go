@@ -1125,7 +1125,7 @@ func OpenChannels(ctx context.Context, graph *GraphHarness,
 	info *TargetsInfo) error {
 
 	// LND0 -> Target
-	chanCap := funding.MaxBtcFundingAmount
+	chanCap := funding.MaxBtcFundingAmountWumbo
 	chan1, err := graph.OpenChannel(ctx, OpenChannelReq{
 		Source:      0,
 		Dest:        info.Target,
