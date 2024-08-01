@@ -10,6 +10,7 @@ import tempfile
 import os
 import sys
 import target_jammed
+import target_liquidity_jammed
 
 lncli_commands = [
     "kubectl exec -it flagship -n warnet-armada -- lncli --network=regtest --tlscertpath=/credentials/lnd0-tls.cert --macaroonpath=/credentials/lnd0-admin.macaroon --rpcserver=lightning-0.warnet-armada",
@@ -151,8 +152,11 @@ if __name__ == "__main__":
     print(f"- Honest traffic paid {honest_to_target_percent}%: {honest_revenue} msat\n")
 
     jam_time = target_jammed.get_jam_time(fwd_file, 440)
-    print(f"Total amount jammed > 440 slots: {jam_time} minutes")
+    print(f"Total amount slot jammed > 440 slots: {jam_time} minutes")
+
+    liquidity_jam_time = target_liquidity_jammed.is_liquidity_jammed(channel_file, fwd_file, 0.9)
+    print(f"Total amount liquidity jammed > 90%: {liquidity_jam_time} minutes\n")
 
     print("Result CSV:")
-    print("attacker_success_msat,attacker_unconditional_msat,target_success_msat,target_unconditional_msat,attacker_to_target_msat,jam_time_min")
-    print(f"{attacker_success_msat},{attacker_unconditional_msat},{success_revenue},{unconditional_revenue},{attacker_to_target_total},{jam_time}")
+    print("attacker_success_msat,attacker_unconditional_msat,target_success_msat,target_unconditional_msat,attacker_to_target_msat,jam_time_min,liquidity_jam_time")
+    print(f"{attacker_success_msat},{attacker_unconditional_msat},{success_revenue},{unconditional_revenue},{attacker_to_target_total},{jam_time},{liquidity_jam_time}")
