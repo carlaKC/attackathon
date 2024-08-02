@@ -119,7 +119,7 @@ if __name__ == "__main__":
     attacker_to_target_uncond_msat = 0
 
     for i, command in enumerate(lncli_commands):
-        attacker_costs = costs.get_attacker_costs('lnd_'+str(i)+'.json', command, target_pubkey)
+        attacker_costs = costs.get_attacker_costs('lnd_'+str(i)+'.json', command, target_pubkey, start_time, end_time)
         total_payment_count += attacker_costs['attacker_total']
         attacker_success_msat += attacker_costs['attacker_success_msat']
         attacker_unconditional_msat += attacker_costs['attacker_unconditional_msat']
