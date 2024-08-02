@@ -4,6 +4,19 @@ import sys
 import time
 import json
 
+def lnd_fee_revenue(file_path):
+    with open(file_path, 'r') as file:
+        data = json.load(file)
+    
+    total_fee_msat = 0
+
+    # Assuming data contains a list of forwarding events
+    for event in data.get("forwarding_events", []):
+        fee_msat = int(event.get("fee_msat", 0))
+        total_fee_msat += fee_msat
+
+    return total_fee_msat
+
 def parse_summary(file_path):
     # Construct the full path to the summary.txt file
     summary_file_path = f"{file_path}/summary.txt"
@@ -66,6 +79,8 @@ if __name__ == "__main__":
     target_revenue = success_revenue + unconditional_revenue
     honest_revenue = target_revenue - attacker_to_target_uncond_msat - attacker_to_target_success_msat
 
+    lnd_fees = lnd_fee_revenue(f"{file_path}/target_lnd_forwards.json")
+
     attacker_to_target_total = attacker_to_target_success_msat + attacker_to_target_uncond_msat
     attacker_to_target_percent = round(attacker_to_target_total * 100 / target_revenue, 2)
     honest_to_target_percent = round(honest_revenue * 100 / target_revenue, 2)
@@ -76,13 +91,10 @@ if __name__ == "__main__":
     print(f"- Unconditional fees: {attacker_unconditional_msat} msat ({attacker_to_target_uncond_msat} to target)\n")
 
     print(f"Target revenue under attack: {target_revenue} msat")
-    print(f"- Success Fees: {success_revenue} msat")
+    print(f"- Success Fees: {success_revenue} msat vs lnd {lnd_fees}")
     print(f"- Unconditional fees: {unconditional_revenue} msat\n")
-
-    print("Attacker payments to target")
-    print(f"- Success fees: {attacker_to_target_success_msat}")
-    print(f"- Unconditional fees: {attacker_to_target_uncond_msat}\n")
 
     print("Breakdown of target's revenue under attack:")
     print(f"- Attacker paid {attacker_to_target_percent}%: {attacker_to_target_total} msat")
     print(f"- Honest traffic paid {honest_to_target_percent}%: {honest_revenue} msat\n")
+
