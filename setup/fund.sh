@@ -17,9 +17,9 @@ lnd_2_get_addr=$($lncli2 newaddress p2tr)
 lnd_2_addr=$(echo "$lnd_2_get_addr" | jq -r '.address')
 
 echo "Funding LND nodes"
-bitcoin-cli generatetoaddress 2 "$lnd_0_addr"
-bitcoin-cli generatetoaddress 2 "$lnd_1_addr"
-bitcoin-cli generatetoaddress 2 "$lnd_2_addr"
+bitcoin-cli generatetoaddress 20 "$lnd_0_addr"
+bitcoin-cli generatetoaddress 20 "$lnd_1_addr"
+bitcoin-cli generatetoaddress 20 "$lnd_2_addr"
 
 echo "Mining to confirm coinbase"
 bitcoin-cli generatetoaddress 100 "$lnd_0_addr"
