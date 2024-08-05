@@ -24,12 +24,19 @@ def get_target_revenue(forwarding_hist_file, start_time_ns, end_time_ns):
     unconditional_fee_msat = 0
 
     for forward in data['forwards']:
-        if int(forward['addTimeNs']) < start_time_ns:
+        # If incoming/ outgoing match, it's bootstrapped
+        htlcIn = forward['incomingCircuit']['htlcIndex']
+        htlcOut = forward['outgoingCircuit']['htlcIndex']
+        if htlcIn == htlcOut and int(htlcIn) > 4294967295:
             continue
 
-        if int(forward['resolveTimeNs']) > end_time_ns:
+        resolveTime = int(forward['resolveTimeNs'])
+        if resolveTime < start_time_ns:
             continue
 
+        if resolveTime > end_time_ns:
+            continue
+        
         incoming_amount = int(forward['incomingAmount'])
         outgoing_amount = int(forward['outgoingAmount'])
         fee_msat = incoming_amount - outgoing_amount
@@ -65,7 +72,8 @@ def paginate_lncli_listpayments(command, max_payments_per_call=10):
     
     return all_payments
 
-def process_attacker_payments(payments, target_pubkey):
+
+def process_attacker_payments(payments, target_pubkey, start_time_ns, end_time_ns):
     results = []
 
     attacker_total = 0
@@ -77,39 +85,42 @@ def process_attacker_payments(payments, target_pubkey):
     target_unconditional_msat = 0
 
     for payment in payments:
-        attacker_total +=1
-        for htlc in payment["htlcs"]:
-            success = htlc["status"] == "SUCCEEDED"
-            
-            route_fee = int(htlc["route"]["total_fees_msat"])
-            attacker_unconditional_msat += route_fee
-            
-            if success:
-                attacker_success_msat += route_fee
-
-            for hop in htlc["route"]["hops"]:
-                if hop["pub_key"] == target_pubkey:
-                    target_total += 1
-                    hop_fee_msat = int(hop["fee_msat"])
-
-                    target_unconditional_msat += hop_fee_msat
+        creation_time_ns = int(payment.get("creation_time_ns", 0))
+        if start_time_ns <= creation_time_ns <= end_time_ns:
+            attacker_total += 1
+            for htlc in payment["htlcs"]:
+                    attacker_total += 1
+                    success = htlc["status"] == "SUCCEEDED"
+                
+                    route_fee = int(htlc["route"]["total_fees_msat"])
+                    attacker_unconditional_msat += route_fee
+                
                     if success:
-                        target_success_msat += hop_fee_msat
+                        attacker_success_msat += route_fee
+
+                    for hop in htlc["route"]["hops"]:
+                        if hop["pub_key"] == target_pubkey:
+                            target_total += 1
+                            hop_fee_msat = int(hop["fee_msat"])
+
+                            target_unconditional_msat += hop_fee_msat
+                            if success:
+                                target_success_msat += hop_fee_msat
 
     return {
-            'attacker_total': attacker_total,
-            'attacker_success_msat': attacker_success_msat,
-            'attacker_unconditional_msat': attacker_unconditional_msat *0.01,
-            'target_total': target_total,
-            'target_success_msat': target_success_msat,
-            'target_unconditional_msat': target_unconditional_msat * 0.01,
+        'attacker_total': attacker_total,
+        'attacker_success_msat': attacker_success_msat,
+        'attacker_unconditional_msat': attacker_unconditional_msat * 0.01,
+        'target_total': target_total,
+        'target_success_msat': target_success_msat,
+        'target_unconditional_msat': target_unconditional_msat * 0.01,
     }
 
-def get_attacker_costs(file_name, command, target_pubkey, max_payments_per_call=10000):
+def get_attacker_costs(file_name, command, target_pubkey, start_time_ns, end_time_ns, max_payments_per_call=10000):
     result = paginate_lncli_listpayments(command, max_payments_per_call)
    
     # Write to json file so that we can re-run if necessary.
     with open(file_name, 'w') as f:
         json.dump({"payments": result}, f, indent=4)
 
-    return process_attacker_payments(result, target_pubkey)
+    return process_attacker_payments(result, target_pubkey, start_time_ns, end_time_ns)
