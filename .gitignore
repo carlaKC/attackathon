@@ -1,0 +1,14 @@
+data.csv
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+
+channels.json
+thresholds.json
+forwarding_history.json
+
+data/*/projections/*
+results/*
+
+attacks

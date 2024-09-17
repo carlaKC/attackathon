@@ -1,0 +1,310 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: warnet-armada
+
+---
+
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: warnet-armada-bitcoind
+    network: warnet
+  name: bitcoind
+  namespace: warnet-armada
+spec:
+  containers:
+  - env:
+    - name: BITCOIN_ARGS
+      value: -regtest=1 -checkmempool=0 -acceptnonstdtxn=1 -debuglogfile=0 -logips=1
+        -logtimemicros=1 -capturemessages=1 -rpcallowip=0.0.0.0/0 -rpcbind=0.0.0.0
+        -fallbackfee=0.00001000 -listen=1 -rpcuser=warnet_user -rpcpassword=2themoon
+        -rpcport=18443 -zmqpubrawblock=tcp://0.0.0.0:28332 -zmqpubrawtx=tcp://0.0.0.0:28333
+        -uacomment=w0 -addnode=warnet-tank-000000-service.warnet
+    image: bitcoindevproject/bitcoin:26.0
+    imagePullPolicy: IfNotPresent
+    livenessProbe:
+      exec:
+        command:
+        - pidof
+        - bitcoind
+      failureThreshold: 3
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      successThreshold: 1
+      timeoutSeconds: 1
+    name: bitcoin
+    readinessProbe:
+      failureThreshold: 1
+      periodSeconds: 1
+      successThreshold: 1
+      tcpSocket:
+        port: 18443
+      timeoutSeconds: 1
+  restartPolicy: OnFailure
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: warnet-armada-bitcoind
+    network: warnet
+  name: bitcoind
+  namespace: warnet-armada
+spec:
+  ports:
+  - name: p2p
+    port: 18444
+    protocol: TCP
+    targetPort: 18444
+  - name: rpc
+    port: 18443
+    protocol: TCP
+    targetPort: 18443
+  - name: zmqblock
+    port: 28332
+    protocol: TCP
+    targetPort: 28332
+  - name: zmqtx
+    port: 28333
+    protocol: TCP
+    targetPort: 28333
+  - name: prometheus-metrics
+    port: 9332
+    protocol: TCP
+    targetPort: 9332
+  selector:
+    app: warnet-armada-bitcoind
+  type: ClusterIP
+
+---
+
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: warnet-armada-lnd0
+    network: warnet
+  name: lnd0
+  namespace: warnet-armada
+spec:
+  containers:
+  - args:
+    - --noseedbackup
+    - --norest
+    - --debuglevel=debug
+    - --accept-keysend
+    - --bitcoin.active
+    - --bitcoin.regtest
+    - --bitcoin.node=bitcoind
+    - --maxpendingchannels=64
+    - --bitcoind.rpcuser=warnet_user
+    - --bitcoind.rpcpass=2themoon
+    - --bitcoind.rpchost=bitcoind.warnet-armada:18443
+    - --bitcoind.zmqpubrawblock=tcp://bitcoind.warnet-armada:28332
+    - --bitcoind.zmqpubrawtx=tcp://bitcoind.warnet-armada:28333
+    - --rpclisten=0.0.0.0:10009
+    - --alias=0
+    - --externalhosts=lightning-0.warnet-armada
+    - --tlsextradomain=lightning-0.warnet-armada
+    - --trickledelay=1
+    - --protocol.wumbo-channels
+    - ""
+    env:
+    - name: LN_IMPL
+      value: lnd
+    image: carlakirkcohen/lnd:attackathon
+    imagePullPolicy: IfNotPresent
+    name: ln
+    readinessProbe:
+      exec:
+        command:
+        - /bin/sh
+        - -c
+        - lncli --network=regtest getinfo
+      failureThreshold: 1
+      initialDelaySeconds: 1
+      periodSeconds: 2
+      successThreshold: 3
+      timeoutSeconds: 2
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: warnet-armada-lnd0
+    network: warnet
+  name: lightning-0
+  namespace: warnet-armada
+spec:
+  ports:
+  - name: rpc
+    port: 10009
+    protocol: TCP
+    targetPort: 10009
+  selector:
+    app: warnet-armada-lnd0
+  type: ClusterIP
+
+---
+
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: warnet-armada-lnd1
+    network: warnet
+  name: lnd1
+  namespace: warnet-armada
+spec:
+  containers:
+  - args:
+    - --noseedbackup
+    - --norest
+    - --debuglevel=debug
+    - --accept-keysend
+    - --bitcoin.active
+    - --bitcoin.regtest
+    - --bitcoin.node=bitcoind
+    - --maxpendingchannels=64
+    - --bitcoind.rpcuser=warnet_user
+    - --bitcoind.rpcpass=2themoon
+    - --bitcoind.rpchost=bitcoind.warnet-armada:18443
+    - --bitcoind.zmqpubrawblock=tcp://bitcoind.warnet-armada:28332
+    - --bitcoind.zmqpubrawtx=tcp://bitcoind.warnet-armada:28333
+    - --rpclisten=0.0.0.0:10009
+    - --alias=1
+    - --externalhosts=lightning-1.warnet-armada
+    - --tlsextradomain=lightning-1.warnet-armada
+    - --trickledelay=1
+    - --protocol.wumbo-channels
+    - ""
+    env:
+    - name: LN_IMPL
+      value: lnd
+    image: carlakirkcohen/lnd:attackathon
+    imagePullPolicy: IfNotPresent
+    name: ln
+    readinessProbe:
+      exec:
+        command:
+        - /bin/sh
+        - -c
+        - lncli --network=regtest getinfo
+      failureThreshold: 1
+      initialDelaySeconds: 1
+      periodSeconds: 2
+      successThreshold: 3
+      timeoutSeconds: 2
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: warnet-armada-lnd1
+    network: warnet
+  name: lightning-1
+  namespace: warnet-armada
+spec:
+  ports:
+  - name: rpc
+    port: 10009
+    protocol: TCP
+    targetPort: 10009
+  selector:
+    app: warnet-armada-lnd1
+  type: ClusterIP
+
+---
+
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: warnet-armada-lnd2
+    network: warnet
+  name: lnd2
+  namespace: warnet-armada
+spec:
+  containers:
+  - args:
+    - --noseedbackup
+    - --norest
+    - --debuglevel=debug
+    - --accept-keysend
+    - --bitcoin.active
+    - --bitcoin.regtest
+    - --bitcoin.node=bitcoind
+    - --maxpendingchannels=64
+    - --bitcoind.rpcuser=warnet_user
+    - --bitcoind.rpcpass=2themoon
+    - --bitcoind.rpchost=bitcoind.warnet-armada:18443
+    - --bitcoind.zmqpubrawblock=tcp://bitcoind.warnet-armada:28332
+    - --bitcoind.zmqpubrawtx=tcp://bitcoind.warnet-armada:28333
+    - --rpclisten=0.0.0.0:10009
+    - --alias=2
+    - --externalhosts=lightning-2.warnet-armada
+    - --tlsextradomain=lightning-2.warnet-armada
+    - --trickledelay=1
+    - --protocol.wumbo-channels
+    - ""
+    env:
+    - name: LN_IMPL
+      value: lnd
+    image: carlakirkcohen/lnd:attackathon
+    imagePullPolicy: IfNotPresent
+    name: ln
+    readinessProbe:
+      exec:
+        command:
+        - /bin/sh
+        - -c
+        - lncli --network=regtest getinfo
+      failureThreshold: 1
+      initialDelaySeconds: 1
+      periodSeconds: 2
+      successThreshold: 3
+      timeoutSeconds: 2
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: warnet-armada-lnd2
+    network: warnet
+  name: lightning-2
+  namespace: warnet-armada
+spec:
+  ports:
+  - name: rpc
+    port: 10009
+    protocol: TCP
+    targetPort: 10009
+  selector:
+    app: warnet-armada-lnd2
+  type: ClusterIP
+
+---
+
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: warnet-armada-flagship
+    network: warnet
+  name: flagship
+  namespace: warnet-armada
+spec:
+  containers:
+  - name: ubuntu
+    image: carlakirkcohen/flagship:latest
+    imagePullPolicy: IfNotPresent

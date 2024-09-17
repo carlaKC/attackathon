@@ -1,0 +1,251 @@
+<?xml version='1.0' encoding='utf-8'?>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://graphml.graphdrawing.org/xmlns http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd">
+  <key id="target_policy" for="edge" attr.name="target_policy" attr.type="string" />
+<key id="services" attr.name="services" attr.type="string" for="graph"/>
+  <key id="source_policy" for="edge" attr.name="source_policy" attr.type="string" />
+  <key id="channel_open" for="edge" attr.name="channel_open" attr.type="string" />
+  <key id="image" for="node" attr.name="image" attr.type="string" />
+  <key id="ln_image" for="node" attr.name="ln_image" attr.type="string" />
+  <key id="ln_cb_image" for="node" attr.name="ln_cb_image" attr.type="string" />
+  <key id="ln_config" for="node" attr.name="ln_config" attr.type="string" />
+  <key id="ln" for="node" attr.name="ln" attr.type="string" />
+  <key id="collect_logs" for="node" attr.name="collect_logs" attr.type="boolean" />
+  <key id="exporter" for="node" attr.name="exporter" attr.type="boolean" />
+  <key id="build_args" for="node" attr.name="build_args" attr.type="string" />
+  <key id="tc_netem" for="node" attr.name="tc_netem" attr.type="string" />
+  <key id="bitcoin_config" for="node" attr.name="bitcoin_config" attr.type="string" />
+  <key id="version" for="node" attr.name="version" attr.type="string" />
+  <graph edgedefault="directed">
+<data key="services">simln</data>
+    <node id="0">
+      <data key="version">26.0</data>
+      <data key="bitcoin_config">-uacomment=tank000000</data>
+      <data key="tc_netem" />
+      <data key="build_args" />
+      <data key="exporter">False</data>
+      <data key="collect_logs">False</data>
+      <data key="ln">lnd</data>
+      <data key="ln_config">--protocol.wumbo-channels</data>
+      <data key="ln_cb_image">carlakirkcohen/circuitbreaker:attackathon-ln_10</data>
+      <data key="ln_image">carlakirkcohen/lnd:attackathon</data>
+    </node>
+    <node id="1">
+      <data key="image">bitcoindevproject/bitcoin:26.0</data>
+      <data key="bitcoin_config">-uacomment=tank000001</data>
+      <data key="tc_netem" />
+      <data key="build_args" />
+      <data key="exporter">False</data>
+      <data key="collect_logs">False</data>
+      <data key="ln">lnd</data>
+      <data key="ln_config">--protocol.wumbo-channels</data>
+      <data key="ln_cb_image">carlakirkcohen/circuitbreaker:attackathon-ln_10</data>
+      <data key="ln_image">carlakirkcohen/lnd:attackathon</data>
+    </node>
+    <node id="2">
+      <data key="version">26.0</data>
+      <data key="bitcoin_config">-uacomment=tank000002</data>
+      <data key="tc_netem" />
+      <data key="build_args" />
+      <data key="exporter">False</data>
+      <data key="collect_logs">False</data>
+      <data key="ln">lnd</data>
+      <data key="ln_config">--protocol.wumbo-channels</data>
+      <data key="ln_cb_image">carlakirkcohen/circuitbreaker:attackathon-ln_10</data>
+      <data key="ln_image">carlakirkcohen/lnd:attackathon</data>
+    </node>
+    <node id="3">
+      <data key="version">26.0</data>
+      <data key="bitcoin_config">-uacomment=tank000003</data>
+      <data key="tc_netem" />
+      <data key="build_args" />
+      <data key="exporter">False</data>
+      <data key="collect_logs">False</data>
+      <data key="ln">lnd</data>
+      <data key="ln_config">--protocol.wumbo-channels</data>
+      <data key="ln_cb_image">carlakirkcohen/circuitbreaker:attackathon-ln_10</data>
+      <data key="ln_image">carlakirkcohen/lnd:attackathon</data>
+    </node>
+    <node id="4">
+      <data key="version">26.0</data>
+      <data key="bitcoin_config">-uacomment=tank000004</data>
+      <data key="tc_netem" />
+      <data key="build_args" />
+      <data key="exporter">False</data>
+      <data key="collect_logs">False</data>
+      <data key="ln">lnd</data>
+      <data key="ln_config">--protocol.wumbo-channels</data>
+      <data key="ln_cb_image">carlakirkcohen/circuitbreaker:attackathon-ln_10</data>
+      <data key="ln_image">carlakirkcohen/lnd:attackathon</data>
+    </node>
+    <node id="5">
+      <data key="version">26.0</data>
+      <data key="bitcoin_config">-uacomment=tank000005</data>
+      <data key="tc_netem" />
+      <data key="build_args" />
+      <data key="exporter">False</data>
+      <data key="collect_logs">False</data>
+      <data key="ln">lnd</data>
+      <data key="ln_config">--protocol.wumbo-channels</data>
+      <data key="ln_cb_image">carlakirkcohen/circuitbreaker:attackathon-ln_10</data>
+      <data key="ln_image">carlakirkcohen/lnd:attackathon</data>
+    </node>
+    <node id="6">
+      <data key="version">26.0</data>
+      <data key="bitcoin_config">-uacomment=tank000006</data>
+      <data key="tc_netem" />
+      <data key="build_args" />
+      <data key="exporter">False</data>
+      <data key="collect_logs">False</data>
+      <data key="ln">lnd</data>
+      <data key="ln_config">--protocol.wumbo-channels</data>
+      <data key="ln_cb_image">carlakirkcohen/circuitbreaker:attackathon-ln_10</data>
+      <data key="ln_image">carlakirkcohen/lnd:attackathon</data>
+    </node>
+    <node id="7">
+      <data key="version">26.0</data>
+      <data key="bitcoin_config">-uacomment=tank000007</data>
+      <data key="tc_netem" />
+      <data key="build_args" />
+      <data key="exporter">False</data>
+      <data key="collect_logs">False</data>
+      <data key="ln">lnd</data>
+      <data key="ln_config">--protocol.wumbo-channels</data>
+      <data key="ln_cb_image">carlakirkcohen/circuitbreaker:attackathon-ln_10</data>
+      <data key="ln_image">carlakirkcohen/lnd:attackathon</data>
+    </node>
+    <node id="8">
+      <data key="version">26.0</data>
+      <data key="bitcoin_config">-uacomment=tank000008</data>
+      <data key="tc_netem" />
+      <data key="build_args" />
+      <data key="exporter">False</data>
+      <data key="collect_logs">False</data>
+      <data key="ln">lnd</data>
+      <data key="ln_config">--protocol.wumbo-channels</data>
+      <data key="ln_cb_image">carlakirkcohen/circuitbreaker:attackathon-ln_10</data>
+      <data key="ln_image">carlakirkcohen/lnd:attackathon</data>
+    </node>
+    <node id="9">
+      <data key="version">26.0</data>
+      <data key="bitcoin_config">-uacomment=tank000009</data>
+      <data key="tc_netem" />
+      <data key="build_args" />
+      <data key="exporter">False</data>
+      <data key="collect_logs">False</data>
+      <data key="ln">lnd</data>
+      <data key="ln_config">--protocol.wumbo-channels</data>
+      <data key="ln_cb_image">carlakirkcohen/circuitbreaker:attackathon-ln_10</data>
+      <data key="ln_image">carlakirkcohen/lnd:attackathon</data>
+    </node>
+    <edge source="0" target="1" id="0" />
+    <edge source="0" target="2" id="0" />
+    <edge source="0" target="7" id="0" />
+    <edge source="0" target="4" id="0" />
+    <edge source="0" target="5" id="0" />
+    <edge source="0" target="3" id="0" />
+    <edge source="0" target="6" id="0" />
+    <edge source="0" target="6" id="53">
+      <data key="channel_open">--local_amt=750000 --push_amt=375000</data>
+      <data key="source_policy"> --base_fee_msat=1000 --fee_rate_ppm=10 --time_lock_delta=144 --min_htlc_msat=3000 --max_htlc_msat=375000000</data>
+      <data key="target_policy"> --base_fee_msat=1000 --fee_rate_ppm=406 --time_lock_delta=100 --min_htlc_msat=1000 --max_htlc_msat=375000000</data>
+    </edge>
+    <edge source="0" target="8" id="0" />
+    <edge source="0" target="9" id="48">
+      <data key="channel_open">--local_amt=50000 --push_amt=25000</data>
+      <data key="source_policy"> --base_fee_msat=1000 --fee_rate_ppm=1 --time_lock_delta=40 --min_htlc_msat=1000 --max_htlc_msat=25000000</data>
+      <data key="target_policy"> --base_fee_msat=1000 --fee_rate_ppm=537 --time_lock_delta=100 --min_htlc_msat=1000 --max_htlc_msat=25000000</data>
+    </edge>
+    <edge source="1" target="2" id="0" />
+    <edge source="1" target="9" id="0" />
+    <edge source="1" target="9" id="49">
+      <data key="channel_open">--local_amt=50000 --push_amt=25000</data>
+      <data key="source_policy"> --base_fee_msat=1000 --fee_rate_ppm=5000 --time_lock_delta=40 --min_htlc_msat=1000 --max_htlc_msat=25000000</data>
+      <data key="target_policy"> --base_fee_msat=1000 --fee_rate_ppm=1 --time_lock_delta=40 --min_htlc_msat=1000 --max_htlc_msat=25000000</data>
+    </edge>
+    <edge source="1" target="6" id="0" />
+    <edge source="1" target="4" id="0" />
+    <edge source="1" target="8" id="0" />
+    <edge source="1" target="7" id="0" />
+    <edge source="1" target="7" id="54">
+      <data key="channel_open">--local_amt=4000000 --push_amt=2000000</data>
+      <data key="source_policy"> --base_fee_msat=1000 --fee_rate_ppm=5000 --time_lock_delta=40 --min_htlc_msat=1000 --max_htlc_msat=2000000000</data>
+      <data key="target_policy"> --base_fee_msat=1000 --fee_rate_ppm=499 --time_lock_delta=144 --min_htlc_msat=1 --max_htlc_msat=2000000000</data>
+    </edge>
+    <edge source="1" target="5" id="0" />
+    <edge source="1" target="3" id="0" />
+    <edge source="1" target="3" id="46">
+      <data key="channel_open">--local_amt=4000000 --push_amt=2000000</data>
+      <data key="source_policy"> --base_fee_msat=1000 --fee_rate_ppm=150 --time_lock_delta=40 --min_htlc_msat=1000 --max_htlc_msat=2000000000</data>
+      <data key="target_policy"> --base_fee_msat=1000 --fee_rate_ppm=1 --time_lock_delta=40 --min_htlc_msat=1000 --max_htlc_msat=2000000000</data>
+    </edge>
+    <edge source="2" target="3" id="0" />
+    <edge source="2" target="3" id="51">
+      <data key="channel_open">--local_amt=6000000 --push_amt=3000000</data>
+      <data key="source_policy"> --base_fee_msat=1000 --fee_rate_ppm=1 --time_lock_delta=40 --min_htlc_msat=1000 --max_htlc_msat=3000000000</data>
+      <data key="target_policy"> --base_fee_msat=1000 --fee_rate_ppm=1440 --time_lock_delta=432 --min_htlc_msat=1000 --max_htlc_msat=3000000000</data>
+    </edge>
+    <edge source="2" target="4" id="0" />
+    <edge source="2" target="6" id="0" />
+    <edge source="2" target="7" id="0" />
+    <edge source="2" target="9" id="0" />
+    <edge source="2" target="8" id="0" />
+    <edge source="2" target="8" id="52">
+      <data key="channel_open">--local_amt=14643925 --push_amt=7321962</data>
+      <data key="source_policy"> --base_fee_msat=9 --fee_rate_ppm=1 --time_lock_delta=34 --min_htlc_msat=1 --max_htlc_msat=7321962000</data>
+      <data key="target_policy"> --base_fee_msat=700 --fee_rate_ppm=1740 --time_lock_delta=432 --min_htlc_msat=1000 --max_htlc_msat=7321962000</data>
+    </edge>
+    <edge source="2" target="5" id="0" />
+    <edge source="3" target="4" id="0" />
+    <edge source="3" target="6" id="0" />
+    <edge source="3" target="7" id="0" />
+    <edge source="3" target="7" id="55">
+      <data key="channel_open">--local_amt=100000000 --push_amt=50000000</data>
+      <data key="source_policy"> --base_fee_msat=1000 --fee_rate_ppm=1 --time_lock_delta=80 --min_htlc_msat=1000 --max_htlc_msat=50000000000</data>
+      <data key="target_policy"> --base_fee_msat=1000 --fee_rate_ppm=999 --time_lock_delta=144 --min_htlc_msat=1 --max_htlc_msat=50000000000</data>
+    </edge>
+    <edge source="3" target="5" id="0" />
+    <edge source="3" target="5" id="47">
+      <data key="channel_open">--local_amt=4000000 --push_amt=2000000</data>
+      <data key="source_policy"> --base_fee_msat=500 --fee_rate_ppm=1 --time_lock_delta=18 --min_htlc_msat=1 --max_htlc_msat=2000000000</data>
+      <data key="target_policy"> --base_fee_msat=1000 --fee_rate_ppm=1 --time_lock_delta=40 --min_htlc_msat=1000 --max_htlc_msat=2000000000</data>
+    </edge>
+    <edge source="3" target="9" id="0" />
+    <edge source="3" target="8" id="0" />
+    <edge source="4" target="5" id="0" />
+    <edge source="4" target="6" id="0" />
+    <edge source="4" target="6" id="56">
+      <data key="channel_open">--local_amt=5000000 --push_amt=2500000</data>
+      <data key="source_policy"> --base_fee_msat=1000 --fee_rate_ppm=1 --time_lock_delta=40 --min_htlc_msat=1000 --max_htlc_msat=2500000000</data>
+      <data key="target_policy"> --base_fee_msat=1000 --fee_rate_ppm=542 --time_lock_delta=144 --min_htlc_msat=3000 --max_htlc_msat=2500000000</data>
+    </edge>
+    <edge source="4" target="7" id="0" />
+    <edge source="4" target="8" id="0" />
+    <edge source="4" target="9" id="0" />
+    <edge source="5" target="6" id="0" />
+    <edge source="5" target="8" id="0" />
+    <edge source="5" target="9" id="0" />
+    <edge source="5" target="7" id="0" />
+    <edge source="5" target="7" id="45">
+      <data key="channel_open">--local_amt=400000 --push_amt=200000</data>
+      <data key="source_policy"> --base_fee_msat=500 --fee_rate_ppm=1 --time_lock_delta=18 --min_htlc_msat=1 --max_htlc_msat=200000000</data>
+      <data key="target_policy"> --base_fee_msat=1000 --fee_rate_ppm=499 --time_lock_delta=144 --min_htlc_msat=1 --max_htlc_msat=200000000</data>
+    </edge>
+    <edge source="6" target="7" id="0" />
+    <edge source="6" target="7" id="57">
+      <data key="channel_open">--local_amt=140000000 --push_amt=70000000</data>
+      <data key="source_policy"> --base_fee_msat=1000 --fee_rate_ppm=2500 --time_lock_delta=144 --min_htlc_msat=3000 --max_htlc_msat=70000000000</data>
+      <data key="target_policy"> --base_fee_msat=1000 --fee_rate_ppm=499 --time_lock_delta=144 --min_htlc_msat=1 --max_htlc_msat=70000000000</data>
+    </edge>
+    <edge source="6" target="8" id="0" />
+    <edge source="6" target="8" id="50">
+      <data key="channel_open">--local_amt=3000000 --push_amt=1500000</data>
+      <data key="source_policy"> --base_fee_msat=0 --fee_rate_ppm=10 --time_lock_delta=34 --min_htlc_msat=1 --max_htlc_msat=1500000000</data>
+      <data key="target_policy"> --base_fee_msat=1000 --fee_rate_ppm=2000 --time_lock_delta=144 --min_htlc_msat=3000 --max_htlc_msat=1500000000</data>
+    </edge>
+    <edge source="6" target="9" id="0" />
+    <edge source="7" target="8" id="0" />
+    <edge source="7" target="9" id="0" />
+    <edge source="8" target="9" id="0" />
+    <edge source="9" target="0" id="0" />
+  </graph>
+</graphml>

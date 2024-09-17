@@ -1,0 +1,82 @@
+{
+  "sim_network": [
+    {
+      "scid": 329853488398336,
+      "capacity_msat": 400000000,
+      "node_1": {
+        "pubkey": "02c2fab8d99106ce621cae6d35aaddcc5a13f6ae9c65f2c9cf2adc6570dc08482d",
+        "alias": "1",
+        "max_htlc_count": 483,
+        "max_in_flight_msat": 400000000,
+        "min_htlc_size_msat": 1,
+        "max_htlc_size_msat": 396000000,
+        "cltv_expiry_delta": 18,
+        "base_fee": 500,
+        "fee_rate_prop": 1
+      },
+      "node_2": {
+        "pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+        "alias": "3",
+        "max_htlc_count": 15,
+        "max_in_flight_msat": 400000000,
+        "min_htlc_size_msat": 0,
+        "max_htlc_size_msat": 1000000,
+        "cltv_expiry_delta": 144,
+        "base_fee": 1000,
+        "fee_rate_prop": 499
+      }
+    },
+    {
+      "scid": 330953000026112,
+      "capacity_msat": 5000000000,
+      "node_1": {
+        "pubkey": "0341a7227fab90a8ec55fdccc5c3d2dbb407b0924f7ccbad2b594f5891ac4a1c9f",
+        "alias": "0",
+        "max_htlc_count": 483,
+        "max_in_flight_msat": 5000000000,
+        "min_htlc_size_msat": 1000,
+        "max_htlc_size_msat": 4950000000,
+        "cltv_expiry_delta": 40,
+        "base_fee": 1000,
+        "fee_rate_prop": 1
+      },
+      "node_2": {
+        "pubkey": "03797da684da0b6de8a813f9d7ebb0412c5d7504619b3fa5255861b991a7f86960",
+        "alias": "2",
+        "max_htlc_count": 15,
+        "max_in_flight_msat": 5000000000,
+        "min_htlc_size_msat": 3000,
+        "max_htlc_size_msat": 4455000000,
+        "cltv_expiry_delta": 144,
+        "base_fee": 1000,
+        "fee_rate_prop": 542
+      }
+    },
+    {
+      "scid": 332052511653888,
+      "capacity_msat": 140000000000,
+      "node_1": {
+        "pubkey": "03797da684da0b6de8a813f9d7ebb0412c5d7504619b3fa5255861b991a7f86960",
+        "alias": "2",
+        "max_htlc_count": 483,
+        "max_in_flight_msat": 140000000000,
+        "min_htlc_size_msat": 3000,
+        "max_htlc_size_msat": 20000000000,
+        "cltv_expiry_delta": 144,
+        "base_fee": 1000,
+        "fee_rate_prop": 2500
+      },
+      "node_2": {
+        "pubkey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
+        "alias": "3",
+        "max_htlc_count": 15,
+        "max_in_flight_msat": 140000000000,
+        "min_htlc_size_msat": 1,
+        "max_htlc_size_msat": 20000000000,
+        "cltv_expiry_delta": 144,
+        "base_fee": 1000,
+        "fee_rate_prop": 499
+      }
+    }
+  ]
+}
