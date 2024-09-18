@@ -192,12 +192,9 @@ on.
  <summary>Setup Instructions</summary>
 
 ### Network Setup
-To get started, you will need to clone the following repos *in the same
-working directory*:
-1. [This repo](https://github.com/carlaKC/attackathon)
-2. [Warnet](https://github.com/bitcoin-dev-project/warnet)
-3. [SimLN](https://github.com/bitcoin-dev-project/sim-ln)
-3. [Circuitbreaker](https://github.com/lightningequipment/circuitbreaker)
+To get started clone the attackathon repo and cd into it:
+`git clone https://github.com/carlaKC/attackathon`
+`cd attackathon`
 
 You will need to provide: 
 1. A `json` file with the same format as LND's `describegraph` output 
@@ -211,7 +208,7 @@ You will need to provide:
 
 The setup script provided will generate all required files and docker 
 images for you:
-`./attackathon/setup/create_network.sh {path to json file} {duration in seconds}`
+`./setup/create_network.sh {path to json file} {duration in seconds}`
 
 Note that you *must* run this from your directory containing `warnet`, 
 `simln` and `circuitbreaker` because it moves between directories to 
