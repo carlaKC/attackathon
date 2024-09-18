@@ -6,3 +6,7 @@
 	path = sim-ln
 	url = https://github.com/carlakc/sim-ln
 	branch = attackathon
+[submodule "circuitbreaker"]
+	path = circuitbreaker
+	url = https://github.com/carlakc/circuitbreaker
+	branch = attackathon
