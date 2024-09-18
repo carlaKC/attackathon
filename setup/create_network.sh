@@ -105,8 +105,6 @@ cp "$raw_data" historical_data/raw_data_csv
 docker buildx build --platform linux/amd64,linux/arm64 -t "$docker_tag" --no-cache --push .
 
 # Clean up everything we left in circuitbreaker.
-git remote remove carla
-git checkout master > /dev/null 2>&1
 rm historical_data/raw_data_csv
 
 cd ..
