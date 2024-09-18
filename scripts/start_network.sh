@@ -1,5 +1,10 @@
 #!/bin/bash
 
+if [ "$(basename "$PWD")" != "attackathon" ]; then
+  echo "Script must be run from inside the attackathon repo."
+  exit 1
+fi
+
 # Check if the 'warnet' directory exists
 if [ ! -d "warnet" ]; then
     echo "Error: Warnet directory not found. Make sure to clone Warnet before running this script."
@@ -16,7 +21,7 @@ network_name="$1"
 
 # Capture the current working directory, which has the attackathon files in it
 current_directory=$(pwd)
-sim_files="$current_directory/attackathon/data/$network_name"
+sim_files="$current_directory/data/$network_name"
 
 cd warnet
 pip install -e .
