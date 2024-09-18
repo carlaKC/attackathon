@@ -9,6 +9,11 @@ usage() {
     exit 1
 }
 
+if [ "$(basename "$PWD")" != "attackathon" ]; then
+  echo "Script must be run from inside the attackathon repo."
+  exit 1
+fi
+
 if [ ! -d "warnet" ]; then
     echo "Error: Warnet directory not found. Make sure to clone Warnet before running this script."
     exit 1
@@ -29,6 +34,8 @@ if ! command -v rustc &> /dev/null; then
     exit 1
 fi
 
+git submodule update --init  --recursive
+
 # Check if required arguments are provided
 if [ $# -gt 2 ]; then
     usage
@@ -48,7 +55,7 @@ fi
 network_name=$(basename "$json_file" .json)
 echo "Setting up network for $network_name"
 
-sim_files="$current_directory"/attackathon/data/"$network_name"
+sim_files="$current_directory"/data/"$network_name"
 echo "Creating simulation files in: "$sim_files""
 mkdir -p $sim_files
 
@@ -61,7 +68,7 @@ else
     echo "Duration argument provided: generating historical data"
 
     simfile="$sim_files"/simln.json
-    python3 attackathon/setup/lnd_to_simln.py "$json_file" "$simfile"
+    python3 setup/lnd_to_simln.py "$json_file" "$simfile"
     cd sim-ln
 
     if [[ -n $(git status --porcelain) ]]; then
@@ -69,16 +76,8 @@ else
         exit 1
     fi
 
-    git remote add carla https://github.com/carlaKC/sim-ln
-
-    git fetch carla > /dev/null 2>&1 || { echo "Failed to fetch carla"; exit 1; }
-    git checkout carla/attackathon > /dev/null 2>&1 || { echo "Failed to checkout carla/attackathon"; exit 1; }
-
     echo "Installing sim-ln for data generation"
     cargo install --locked --path sim-cli
-
-    git remote remove carla
-    git checkout main > /dev/null 2>&1
 
     # First, generate data for the duration specified to bootstrap forwarding history for the nodes.
     # We fix this seed, but not with the value that we'll be running warnet with (because this is history).
@@ -99,13 +98,6 @@ if [[ -n $(git status --porcelain) ]]; then
     echo "Error: there are unsaved changes in circuitbreaker, please stash them!"
     exit 1
 fi
-
-if ! git remote | grep -q carla; then
-    git remote add carla https://github.com/carlaKC/circuitbreaker
-fi
-
-git fetch carla > /dev/null 2>&1 || { echo "Failed to fetch carla/circuitbreaker"; exit 1; }
-git checkout carla/attackathon > /dev/null 2>&1 || { echo "Failed to checkout carla/circuitbreaker/attackathon"; exit 1; }
 
 cp "$raw_data" historical_data/raw_data_csv
 

@@ -1,5 +1,10 @@
 #!/bin/bash
-#
+
+if [ "$(basename "$PWD")" != "attackathon" ]; then
+  echo "Script must be run from inside the attackathon repo."
+  exit 1
+fi
+
 if [ ! -d "warnet" ]; then
     echo "Error: warnet directory not found."
 	exit 1

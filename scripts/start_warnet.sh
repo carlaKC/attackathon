@@ -11,22 +11,25 @@ check_command() {
 check_command just
 check_command docker
 
+if [ "$(basename "$PWD")" != "attackathon" ]; then
+  echo "Script must be run from inside the attackathon repo."
+  exit 1
+fi
+
+# Update submodules so that all code is checked out.
+git submodule update --init  --recursive
+
 if [ ! -d "warnet" ]; then
-    git clone https://github.com/bitcoin-dev-project/warnet
+	echo "Warnet is not checked out!"
 fi
 
 cd warnet
 
-if [ -n "$(git status --porcelain)" ]; then
-    echo "There are uncommitted changes in warnet, please stash them!"
-    exit 1
+current_branch=$(git rev-parse --abbrev-ref HEAD)
+if [ "$current_branch" != "attackathon" ]; then
+  echo "Expected to be on attackathon branch, got: '$current_branch'."
+  exit 1
 fi
-
-# Grab attackathon branch that will run with a fixed seed.
-git remote add carla https://github.com/carlaKC/warnet
-git fetch carla > /dev/null 2>&1 || { echo "Failed to fetch carla/warnet"; exit 1; }
-git checkout carla/attackathon > /dev/null 2>&1 || { echo "Failed to checkout carla/warnet/attackathon"; exit 1; }
-git remote remove carla
 
 # Check whether running docker desktop or minikube.
 docker_info=$(docker info)

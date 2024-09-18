@@ -68,35 +68,33 @@ network are:
 * [Just](https://github.com/casey/just)
 * [jq](https://jqlang.github.io/jq)
 
-Clone the attackathon repo:
+Clone the attackathon repo and cd into it:
 `git clone https://github.com/carlaKC/attackathon`
+`cd attackathon`
 
-*Do not change directory.*
-
-The scripts will pull the relevant repositories to your current working
-directory and set up your network. They expect the `attackathon` 
-repository to be in the current directory.
-* Warnet server: [./attackathon/scripts/start_warnet.sh](./scripts/start_warnet.sh) 
+The following scripts can be run from the `attackathon` directory to
+manage your network:
+* Warnet server: [./scripts/start_warnet.sh](./scripts/start_warnet.sh) 
   sets up the warnet server, which is responsible for orchestration of 
   the network. 
   * You'll only need to do this once, but leave it running!
   * When you're done with it, bring it down with 
-    [./attackathon/scripts/stop_warnet.sh](./scripts/stop_warnet.sh)
-* Start network: [./attackathon/scripts/start_network.sh ln_10](/.scripts/start_network.sh)
+    [./scripts/stop_warnet.sh](./scripts/stop_warnet.sh)
+* Start network: [./scripts/start_network.sh ln_10](/.scripts/start_network.sh)
   brings up your lightning network, opens channels, simulates 
   random payments in the network and mines blocks every 5 minutes.
   * If you want to kill your test network and start fresh, you can 
-    use [./attackathon/scripts/stop_network.sh ln_10](./scripts/stop_network.sh)
+    use [./scripts/stop_network.sh ln_10](./scripts/stop_network.sh)
   * You need to wait for this script to complete before you can start 
     your attacking pod!
 
 Wait for your network to fully come up, then you can start your pod 
 of attacking nodes:
-* Start attacking pods: [./attackathon/scripts/start_attacker.sh ln_10](./scripts/start_attacker.sh)
+* Start attacking pods: [./scripts/start_attacker.sh ln_10](./scripts/start_attacker.sh)
   brings up three lightning nodes that you will use for your attack, 
   a bitcoin node and an empty `flagship` container to run your attack 
   from.
-  * You can use [./attackathon/scripts/stop_attacker.sh](./scripts/stop_attacker.sh) 
+  * You can use [./scripts/stop_attacker.sh](./scripts/stop_attacker.sh) 
     to tear this down if you'd like to start over at any point.
 
 Once you have brought your cluster up, you'll be able to execute your 
@@ -194,12 +192,9 @@ on.
  <summary>Setup Instructions</summary>
 
 ### Network Setup
-To get started, you will need to clone the following repos *in the same
-working directory*:
-1. [This repo](https://github.com/carlaKC/attackathon)
-2. [Warnet](https://github.com/bitcoin-dev-project/warnet)
-3. [SimLN](https://github.com/bitcoin-dev-project/sim-ln)
-3. [Circuitbreaker](https://github.com/lightningequipment/circuitbreaker)
+To get started clone the attackathon repo and cd into it:
+`git clone https://github.com/carlaKC/attackathon`
+`cd attackathon`
 
 You will need to provide: 
 1. A `json` file with the same format as LND's `describegraph` output 
@@ -213,7 +208,7 @@ You will need to provide:
 
 The setup script provided will generate all required files and docker 
 images for you:
-`./attackathon/setup/create_network.sh {path to json file} {duration in seconds}`
+`./setup/create_network.sh {path to json file} {duration in seconds}`
 
 Note that you *must* run this from your directory containing `warnet`, 
 `simln` and `circuitbreaker` because it moves between directories to 

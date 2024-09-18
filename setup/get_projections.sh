@@ -1,5 +1,10 @@
 #!/bin/bash
 
+if [ "$(basename "$PWD")" != "attackathon" ]; then
+  echo "Script must be run from inside the attackathon repo."
+  exit 1
+fi
+
 if [ ! -d "sim-ln" ]; then
     echo "Error: Sim-LN directory not found. Make sure to clone Sim-LN before running this script."
     exit 1
@@ -16,7 +21,7 @@ network_name="$1"
 current_directory=$(pwd)
 
 # Get simulation file for selected network.
-sim_files="$current_directory"/attackathon/data/"$network_name"
+sim_files="$current_directory"/data/"$network_name"
 simfile="$sim_files"/simln.json
 
 # Create directory for projected revenue.
@@ -29,16 +34,8 @@ if [[ -n $(git status --porcelain) ]]; then
     exit 1
 fi
 
-git remote add carla https://github.com/carlaKC/sim-ln
-
-git fetch carla > /dev/null 2>&1 || { echo "Failed to fetch carla"; exit 1; }
-git checkout carla/attackathon > /dev/null 2>&1 || { echo "Failed to checkout carla/attackathon"; exit 1; }
-
 echo "Installing sim-ln for data generation"
 cargo install --locked --path sim-cli
-
-git remote remove carla
-git checkout main > /dev/null 2>&1
 
 # Next, generate data that we'll use to project the payments that the network would make without an attack 
 # present. We do this for a fixed 1 week period, because we're unlikely to run our simulation for longer 
