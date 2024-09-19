@@ -1,6 +1,8 @@
 import sys
+import json
 import os
 import analyse_attack
+import costs
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -21,3 +23,12 @@ if __name__ == "__main__":
 
         threshold_file = os.path.join(directory, f"{padded_node_id}_thresholds.json")
         analyse_attack.save_thresholds(padded_node_id, threshold_file)
+
+        command = f"warcli lncli {padded_node_id}"
+        result = costs.paginate_lncli_listpayments(command, 10000)
+        # Write to json file so that we can re-run if necessary.
+
+        payments_file = os.path.join(directory, f"{padded_node_id}_payments.json")
+        with open(payments_file, 'w') as f:
+            json.dump({"payments": result}, f, indent=4)
+
