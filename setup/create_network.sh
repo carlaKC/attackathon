@@ -113,7 +113,10 @@ cd ..
 # will use our generated data.
 echo "Generating warnet file for network"
 cd warnet 
-pip install -e . > /dev/null 2>&1 
+
+python3 -m venv .venv
+source .venv/bin/activate
+pip3 install -e .
 
 # Run warnet in the background and capture pid for shutdown.
 warnet > /dev/null 2>&1 &
@@ -128,6 +131,7 @@ if ps -p $warnet_pid > /dev/null; then
     wait $warnet_pid 2>/dev/null
 fi
 
+deactivate
 cd ..
 
 # We need to manually insert a sim-ln attribute + key to warnet graph.
