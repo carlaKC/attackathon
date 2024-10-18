@@ -83,10 +83,11 @@ else
     # We fix this seed, but not with the value that we'll be running warnet with (because this is history).
     runtime=$((duration / 1000))
     echo "Generating historical data for $duration seconds, will take: $runtime seconds with speedup of 1000"
-    sim-cli --clock-speedup 1000 --fix-seed 13995354354227336701 -s "$simfile" -t "$duration"
+    sim-cli --clock-speedup 1000 --fix-seed 13995354354227336701 -s "$simfile" -t "$duration" -d "$sim_files"
 
-    input_csv="results/htlc_forwards.csv"
+    input_csv="$sim_files/results/htlc_forwards.csv"
     mv "$input_csv" "$raw_data"
+	rm -rf "$sim_files/results"
 
     cd ..
 fi
