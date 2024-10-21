@@ -10,3 +10,6 @@
 	path = circuitbreaker
 	url = https://github.com/carlakc/circuitbreaker
 	branch = attackathon
+[submodule "lrc"]
+	path = lrc
+	url = https://github.com/carlaKC/lrc
