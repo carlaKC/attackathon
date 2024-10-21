@@ -9,6 +9,7 @@ thresholds.json
 forwarding_history.json
 
 data/*/projections/*
+data/*/reputations.csv
 results/*
 
 attacks

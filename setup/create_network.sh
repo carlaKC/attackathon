@@ -14,6 +14,8 @@ if [ "$(basename "$PWD")" != "attackathon" ]; then
   exit 1
 fi
 
+git submodule update --init  --recursive
+
 if [ ! -d "warnet" ]; then
     echo "Error: Warnet directory not found. Make sure to clone Warnet before running this script."
     exit 1
@@ -29,12 +31,20 @@ if [ ! -d "circuitbreaker" ]; then
     exit 1
 fi
 
+if [ ! -d "lrc" ]; then
+    echo "Error: LRC directory not found. Please fix submodules."
+    exit 1
+fi
+
 if ! command -v rustc &> /dev/null; then
     echo "Error: Rust compiler (rustc) is not installed. Please install Rust from https://www.rust-lang.org/."
     exit 1
 fi
 
-git submodule update --init  --recursive
+if ! command -v go &> /dev/null; then
+	echo "Error: Golang is not installed."
+    exit 1
+fi
 
 # Check if required arguments are provided
 if [ $# -gt 2 ]; then
@@ -92,6 +102,16 @@ else
     cd ..
 fi
 
+# Generate reputation scores from raw sim ln data
+echo "Generating reputation data from raw data"
+cd lrc
+go run cmd/main.go "$sim_files"
+
+reputation_data="$sim_files/reputations.csv"
+mv "${network_name}_reputations.csv" "$reputation_data"
+
+cd ..
+
 echo "Building circuitbreaker image with new data"
 cd circuitbreaker
 
@@ -100,7 +120,7 @@ if [[ -n $(git status --porcelain) ]]; then
     exit 1
 fi
 
-cp "$raw_data" historical_data/raw_data_csv
+cp "$reputation_data" historical_data/raw_data_csv
 
 # Build with no cache because docker is sometimes funny with not detecting changes in the files being copied in.
 docker buildx build --platform linux/amd64,linux/arm64 -t "$docker_tag" --no-cache --push .
